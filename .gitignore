@@ -1,0 +1,38 @@
+# --- Gizli bilgiler (Adafruit IO anahtari vb.) ---
+**/netcfg.h
+
+# --- Keil MDK derleme ciktilari ---
+**/MDK-ARM/Test/
+**/MDK-ARM/DebugConfig/
+**/MDK-ARM/RTE/
+**/MDK-ARM/*.uvguix.*
+**/MDK-ARM/JLinkLog.txt
+**/MDK-ARM/EventRecorderStub.scvd
+*.o
+*.d
+*.crf
+*.lst
+*.map
+*.axf
+*.hex
+*.bin
+*.htm
+*.lnp
+*.dep
+*.iex
+*.sct
+*.bak
+
+# --- CubeMX'in yeniden urettigi kutuphaneler ---
+# (Test.ioc acilip "Generate Code" ile geri gelir)
+firmware-f746/Drivers/STM32F7xx_HAL_Driver/
+firmware-f746/Drivers/CMSIS/
+firmware-f746/Middlewares/
+
+# --- Isletim sistemi / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*conflicted copy*
+.vscode/
