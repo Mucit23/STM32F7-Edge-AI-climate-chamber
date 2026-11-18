@@ -14,7 +14,7 @@ kontrolcü testleri için kullanılır.
 | Birim | Görev |
 |---|---|
 | STM32F746G-DISCO | Ana kontrol, 480×272 dokunmatik LCD, SD kart, Ethernet |
-| STM32F072 Peltier sürücü kartı | Peltier PWM (10 kHz), USART6 üzerinden komut |
+| STM32F072C8 Peltier sürücü kartı | H köprüsü, 10 kHz PWM, ana karttan USART6 ile komut |
 | DHT22 (D5) | Kabin hava sıcaklığı ve bağıl nem |
 | DS18B20 (D3) | Peltier iç soğutucu yüzeyi |
 | DS18B20 (D4) | Karşı duvar yüzeyi |
