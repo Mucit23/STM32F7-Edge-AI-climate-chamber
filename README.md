@@ -39,16 +39,19 @@ docs/               Test protokolü, bağlantı şemaları, notlar
 - Deney modu: P1 statik, P2 basamak, P3 APRBS, P4 kapalı çevrim, P5 sabit set değeri,
   P6 doğrulama ve TAM PROTOKOL. RTC tabanlı durum makinesi, durum EEPROM'da saklanır.
 - PID (anti-windup) ve histerezisli ON/OFF kontrol
-- Ethernet (LwIP, DHCP), Adafruit IO'ya MQTT ile uzaktan izleme (geliştiriliyor)
+- Ethernet (LwIP, DHCP), başlıkta IP ve sunucu durumu
+- Adafruit IO'ya MQTT ile uzaktan izleme: 20 s'de bir `iklim` grubuna gönderim
+  (feed'ler: `t-air`, `rh`, `t-peltier`, `t-wall`, `t-ambient`, `u-cmd` [%],
+  `setpoint`, `safety`, `status`)
 
 ### Derleme
 Araçlar: STM32CubeMX 6.15, STM32Cube FW_F7 V1.17.4, Keil MDK 5 (ArmClang V6.24).
 
 1. `firmware-f746/Test.ioc` dosyasını CubeMX'te açıp **Generate Code** deyin.
    HAL, CMSIS ve Middlewares (FatFs, LwIP) klasörleri repoda yok, CubeMX bunları üretir.
-2. (MQTT modülü eklendikten sonra) `Core/Inc/netcfg_example.h` dosyasını
-   `Core/Inc/netcfg.h` adıyla kopyalayıp kendi Adafruit IO kullanıcı adınızı ve
-   anahtarınızı yazın. `netcfg.h` repoya gönderilmez.
+2. `Core/Inc/netcfg_example.h` dosyasını `Core/Inc/netcfg.h` adıyla kopyalayıp kendi
+   Adafruit IO kullanıcı adınızı ve anahtarınızı yazın, `AIO_ENABLE` değerini 1 yapın.
+   `netcfg.h` repoya gönderilmez. Dosya yoksa derleme örnekle yapılır, gönderim kapalı kalır.
 3. `MDK-ARM/Test.uvprojx` projesini Keil'de açıp derleyin.
 
 ### CubeMX notları

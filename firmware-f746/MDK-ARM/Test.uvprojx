@@ -465,6 +465,11 @@
               <FileType>1</FileType>
               <FilePath>..\Core\Src\net.c</FilePath>
             </File>
+            <File>
+              <FileName>aio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\aio.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

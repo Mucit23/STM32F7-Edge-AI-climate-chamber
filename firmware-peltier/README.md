@@ -30,8 +30,8 @@ Ana kart komutu yaklaşık 500 ms'de bir tekrarlar. Sürücü 2 s boyunca komut 
 PWM'i ve DRIVER_EN'i kapatır (güvenlik). Paketlerin sonundaki `\n` okunabilirlik
 içindir, alıcı onu yok sayar.
 
-Koddaki açıklamaya göre −1000 en yüksek soğutma, +1000 en yüksek ısıtma. Yön Peltier'in
-bağlantısına bağlı olduğu için ilk testte düşük bir komutla (`*250#`) doğrulanmalı.
+Yön testle doğrulandı: 0 … +1000 ısıtma, 0 … −1000 soğutma. Ana karttaki kontrolcüler
+(PID, ON/OFF) bu işaret kuralına göre yazıldı: hata = set − ölçüm > 0 ise ısıtma.
 
 ## Derleme
 Araçlar: STM32CubeMX 6.15, STM32Cube FW_F0 V1.11.6, Keil MDK 5.

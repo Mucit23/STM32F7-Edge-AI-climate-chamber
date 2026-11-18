@@ -37,6 +37,7 @@
 #include "exp.h"
 #include "lwip/sio.h"
 #include "net.h"
+#include "aio.h"
 #include "fatfs_platform.h"
 #include <string.h>
 #include <stdio.h>
@@ -114,6 +115,7 @@ static void UI_UpdatePeltier(uint8_t force);
 static void UI_UpdateSd(void);
 static void UI_UpdateExp(uint8_t force);
 static void UI_UpdateNet(uint8_t force);
+static void Aio_Fill(Aio_Data *a);
 static void Fmt_Fixed(char *buf, size_t n, int32_t v, int32_t scale);
 /* USER CODE END PFP */
 
@@ -215,6 +217,7 @@ int main(void)
   SdLog_Init();               /* SD kart TXT kaydi                         */
   rtc_ok = DS3231_GetTimeDate(&hi2c1, &rtc);
   Exp_Init(&hi2c1, &rtc, rtc_ok);   /* deney: calisan test varsa kaldigi yerden */
+  Aio_Init();                       /* Adafruit IO MQTT istemcisi (netcfg.h)    */
   Screen_Init(&hi2c1);        /* dokunmatik panel + ekran durum makinesi   */
   printf("\r\n%s\r\n", SDLOG_COLUMNS);
   Draw_StartupScreen();
@@ -291,6 +294,11 @@ int main(void)
       }
 
       Net_Task1Hz();            /* kablo / IP / sunucu durumu, degisince log */
+      {
+        Aio_Data ad;
+        Aio_Fill(&ad);
+        Aio_Task1Hz(&ad);       /* Adafruit IO: baglanti + 20 s'de bir gonderim */
+      }
 
       if (Screen_Current() == SCREEN_MAIN)
       {
@@ -1212,6 +1220,44 @@ void App_RecordingChanged(void)
     UI_DrawButton(UI_BTN_REC, 0U);
     UI_UpdateSd();
   }
+}
+
+/* Adafruit IO'ya gidecek anlik degerler (gecersiz sensorler gonderilmez) */
+static void Aio_Fill(Aio_Data *a)
+{
+  const Exp_Status *e = Exp_GetStatus();
+  char k[20];
+
+  memset(a, 0, sizeof(*a));
+  a->air_ok   = (hdht22.valid && hdht22.last_status == DHT22_OK) ? 1U : 0U;
+  a->air_x10  = hdht22.temperature_x10;
+  a->rh_ok    = a->air_ok;
+  a->rh_x10   = hdht22.humidity_x10;
+  a->pel_ok   = (hds_heatsink.status == DS18B20_OK) ? 1U : 0U;
+  a->pel_x100 = hds_heatsink.temperature_x100;
+  a->wall_ok  = (hds_wall.status == DS18B20_OK) ? 1U : 0U;
+  a->wall_x100 = hds_wall.temperature_x100;
+  a->amb_ok   = (hds_ambient.status == DS18B20_OK) ? 1U : 0U;
+  a->amb_x100 = hds_ambient.temperature_x100;
+  a->u_cmd    = Peltier_GetCommand();
+  a->safety   = (uint8_t)e->safety;
+
+  if (e->state == EXP_IDLE)
+  {
+    snprintf(a->status, sizeof(a->status), "BOSTA");
+    return;
+  }
+  a->sp_ok  = (e->closed && e->state != EXP_DONE) ? 1U : 0U;
+  a->sp_x10 = e->sp_x10;
+
+  Exp_FormatDuration(k, sizeof(k), (e->state == EXP_DONE) ? 0U : e->total_left_s);
+  if (e->safety != EXP_SAFE_OK)
+    snprintf(a->status, sizeof(a->status), "%s | GUVENLIK: %s", Exp_ProcName(e->proc), Exp_SafetyName(e->safety));
+  else if (e->full)
+    snprintf(a->status, sizeof(a->status), "%s [%u/%u] | %s | kalan %s", Exp_ProcName(e->proc),
+             e->stage + 1U, e->stages, Exp_StateName(e->state), k);
+  else
+    snprintf(a->status, sizeof(a->status), "%s | %s | kalan %s", Exp_ProcName(e->proc), Exp_StateName(e->state), k);
 }
 
 /* Ana ekran basligi: ag ve sunucu durumu. Metin degismedikce yeniden cizilmez. */

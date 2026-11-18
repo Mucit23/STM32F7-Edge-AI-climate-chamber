@@ -110,6 +110,13 @@
  * Sabit adresi kaldiriyoruz: mem.c heap'i normal bir dizi olarak tanimlar. */
 #undef LWIP_RAM_HEAP_POINTER
 
+/* MQTT (Adafruit IO, aio.c): grup gonderimi ~300 bayt -> cikis tamponu 512.
+ * Gelen throttle/errors mesajlari icin baslik tamponu 256. MQTT istemcisi
+ * bir adet periyodik zamanlayici (keep-alive) kullanir. */
+#define MQTT_OUTPUT_RINGBUF_SIZE    512
+#define MQTT_VAR_HEADER_BUFFER_LEN  256
+#define MEMP_NUM_SYS_TIMEOUT        (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 2)
+
 /* USER CODE END 1 */
 
 #ifdef __cplusplus
