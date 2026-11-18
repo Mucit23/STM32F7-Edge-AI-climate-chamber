@@ -226,6 +226,7 @@
   <div class="charts-head">
     <h2>Geçmiş</h2>
     <div class="range" role="group" aria-label="Zaman aralığı">
+      <button type="button" data-h="1">1 saat</button>
       <button type="button" data-h="6">6 saat</button>
       <button type="button" data-h="24" aria-pressed="true">24 saat</button>
       <button type="button" data-h="168">7 gün</button>
@@ -259,10 +260,12 @@ const CFG = {
   staleS: 90                 /* bu kadar sure veri gelmezse "cevrimdisi" */
 };
 const API = "https://io.adafruit.com/api/v2/" + encodeURIComponent(CFG.user) + "/";
-const RANGES = { 6: 1, 24: 5, 168: 30, 720: 120 };   /* saat -> cozunurluk (dk) */
+/* saat -> cozunurluk (dk). 0 = ham veri (kart 20 s'de bir gonderir: 1 saatte 180 nokta) */
+const RANGES = { 1: 0, 6: 0, 24: 1, 168: 10, 720: 30 };
 const SAFETY = ["Güvenlik normal", "Hava sıcaklığı sınırda", "Peltier yüzeyi sınırda", "Hava sensörü okunamıyor"];
 
 let rangeH = 24;
+try { const h = parseInt(localStorage.getItem("range_h"), 10); if (h in RANGES) rangeH = h; } catch (e) {}
 let last = {};               /* kisa feed adi -> {value, t} */
 let lastUpdate = 0;          /* en yeni verinin zamani (ms) */
 let failCount = 0;
@@ -448,10 +451,18 @@ function timeTicks(u, splits, ax, space, incr) {
 }
 
 async function feedChart(key) {
+  const base = "feeds/" + encodeURIComponent(fullKey[key] || (CFG.group + "." + key)) + "/data/chart?hours=" + rangeH;
+  const conv = (j) => (j.data || []).map(([d, v]) => [Math.floor(Date.parse(d) / 1000), num(v)])
+                                    .sort((a, b) => a[0] - b[0]);
+  const res = RANGES[rangeH];
   try {
-    const j = await api("feeds/" + encodeURIComponent(fullKey[key] || (CFG.group + "." + key)) +
-                        "/data/chart?hours=" + rangeH + "&resolution=" + RANGES[rangeH]);
-    return (j.data || []).map(([d, v]) => [Math.floor(Date.parse(d) / 1000), num(v)]);
+    if (res === 0)
+    {
+      /* ham veri; olmazsa 1 dk'lik ortalamaya dus */
+      try { const r = conv(await api(base + "&raw=true")); if (r.length) return r; } catch (e) {}
+      return conv(await api(base + "&resolution=1"));
+    }
+    return conv(await api(base + "&resolution=" + res));
   } catch (e) {
     return [];                       /* feed yoksa (ornegin setpoint) bos seri */
   }
@@ -525,6 +536,7 @@ document.querySelectorAll(".range button").forEach((b) => {
     document.querySelectorAll(".range button").forEach((x) => x.setAttribute("aria-pressed", "false"));
     b.setAttribute("aria-pressed", "true");
     rangeH = parseInt(b.dataset.h, 10);
+    try { localStorage.setItem("range_h", String(rangeH)); } catch (e) {}
     loadCharts();
   });
 });
@@ -545,6 +557,10 @@ window.addEventListener("resize", () => {
 });
 
 tick(); setInterval(tick, 1000);
+/* son secilen aralik (tarayicida hatirlanir) */
+document.querySelectorAll(".range button").forEach((x) =>
+  x.setAttribute("aria-pressed", parseInt(x.dataset.h, 10) === rangeH ? "true" : "false"));
+
 /* once son degerler (feed anahtarlari ogrenilir), sonra grafikler */
 poll().finally(loadCharts);
 setInterval(poll, CFG.pollMs);
