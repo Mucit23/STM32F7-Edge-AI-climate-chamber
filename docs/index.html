@@ -297,14 +297,24 @@ function notice(text, askKey) {
 }
 
 /* ---------------- Son degerler ---------------- */
+const fullKey = {};          /* kisa ad -> Adafruit IO feed anahtari (ornek "iklim.t-air") */
+function pickGroup(list) {
+  const pre = CFG.group + ".";
+  return (Array.isArray(list) ? list : []).filter((f) => String(f.key).startsWith(pre));
+}
 async function poll() {
   try {
-    const g = await api("groups/" + encodeURIComponent(CFG.group));
+    /* Anahtar varsa grup okunur. Anahtarsiz okumada grup gizlilik ayari olmadigi
+     * icin kullanicinin public feed listesi alinir ve bu grubun feed'leri secilir. */
+    const feeds = getKey() ? ((await api("groups/" + encodeURIComponent(CFG.group))).feeds || [])
+                           : pickGroup(await api("feeds?public=true"));
+    if (!feeds.length) { const e = new Error("feed yok"); e.status = 404; throw e; }
     last = {};
     lastUpdate = 0;
-    for (const f of g.feeds || []) {
+    for (const f of feeds) {
       const t = Date.parse(f.updated_at || f.last_value_at || 0) || 0;
       last[shortKey(f.key)] = { value: f.last_value, t };
+      fullKey[shortKey(f.key)] = f.key;
       if (t > lastUpdate) lastUpdate = t;
     }
     failCount = 0;
@@ -313,8 +323,10 @@ async function poll() {
   } catch (e) {
     failCount++;
     if (e.status === 404 || e.status === 401 || e.status === 403) {
-      notice("“" + CFG.group + "” grubu okunamadı. Adafruit IO'da grup ve içindeki feed'ler herkese açık (public) değilse sayfa veriyi göremez. " +
-             "Ya grubu ve feed'leri public yapın ya da anahtarınızı bu tarayıcıya kaydedin (anahtar yalnızca bu cihazda saklanır).", true);
+      notice(getKey()
+        ? "Kayıtlı anahtarla “" + CFG.group + "” grubu okunamadı (" + e.message + "). Anahtarı kontrol edip yeniden kaydedin, boş kaydederseniz anahtar silinir."
+        : "“" + CFG.group + "” grubunda herkese açık (public) feed bulunamadı. Adafruit IO'da feed'leri public yapın " +
+          "ya da anahtarınızı bu tarayıcıya kaydedin (anahtar yalnızca bu cihazda saklanır).", true);
     } else {
       notice("Adafruit IO'ya ulaşılamadı (" + e.message + "). İnternet bağlantısını kontrol edin, sayfa 20 saniye sonra yeniden deneyecek.", false);
     }
@@ -437,7 +449,7 @@ function timeTicks(u, splits, ax, space, incr) {
 
 async function feedChart(key) {
   try {
-    const j = await api("feeds/" + encodeURIComponent(CFG.group + "." + key) +
+    const j = await api("feeds/" + encodeURIComponent(fullKey[key] || (CFG.group + "." + key)) +
                         "/data/chart?hours=" + rangeH + "&resolution=" + RANGES[rangeH]);
     return (j.data || []).map(([d, v]) => [Math.floor(Date.parse(d) / 1000), num(v)]);
   } catch (e) {
@@ -533,8 +545,10 @@ window.addEventListener("resize", () => {
 });
 
 tick(); setInterval(tick, 1000);
-poll(); setInterval(poll, CFG.pollMs);
-loadCharts(); setInterval(loadCharts, CFG.chartMs);
+/* once son degerler (feed anahtarlari ogrenilir), sonra grafikler */
+poll().finally(loadCharts);
+setInterval(poll, CFG.pollMs);
+setInterval(loadCharts, CFG.chartMs);
 </script>
 </body>
 </html>

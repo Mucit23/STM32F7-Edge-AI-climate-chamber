@@ -33,7 +33,8 @@ docs/               Uzaktan izleme sayfası (index.html, GitHub Pages) ve belgel
 ## Uzaktan izleme
 `docs/index.html` tek dosyalık bir web sayfası. Adafruit IO'daki `iklim` grubunun son
 değerlerini 20 s'de bir, grafik verisini 5 dakikada bir REST API'den okur. Sayfa
-anahtarsız çalışır, bunun için grup ve feed'ler Adafruit IO'da public olmalı.
+anahtarsız çalışır: kullanıcının public feed listesinden `iklim.` ile başlayanları alır,
+bunun için feed'ler Adafruit IO'da public olmalı (grubun ayrı bir gizlilik ayarı yok).
 Yayın: GitHub Pages, `main` dalı, `/docs` klasörü.
 
 ## firmware-f746
