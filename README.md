@@ -41,7 +41,11 @@ Yayın: GitHub Pages, `main` dalı, `/docs` klasörü.
 
 ### Özellikler
 - Dokunmatik arayüz: sensör kartları, Peltier çıkışı, deney ve SD durumu, başlıkta ağ durumu
-- SD kayıt: günlük `LOG_YYYYMMDD.txt` dosyaları, 1 Hz, elektrik kesintisinden sonra devam
+- SD kayıt, 1 Hz, elektrik kesintisinden sonra aynı dosyaya devam:
+  - her deney kendi dosyasında: `P1_20261118_1705.txt` (deney + başlangıç zamanı),
+    tam protokolde aşama başına `T1P1_…`, `T2P2_…`, `T3P3_…`, `T4P4_…`, `T5P6_…`;
+    86 400 satırda `_2`, `_3` … ile devam eder, gece yarısında bölünmez
+  - deney yokken (KAYIT BASLAT ile) günlük `LOG_YYYYMMDD.txt`
 - Deney modu: P1 statik, P2 basamak, P3 APRBS, P4 kapalı çevrim, P5 sabit set değeri,
   P6 doğrulama ve TAM PROTOKOL. RTC tabanlı durum makinesi, durum EEPROM'da saklanır.
 - PID (anti-windup) ve histerezisli ON/OFF kontrol

@@ -314,7 +314,7 @@ void UI_DrawSd(const UI_SdInfo *sd)
   Fill(SD_X + 4U, SD_Y + 4U, (uint16_t)(len * 7U + 8U), 15U, bg);
   Text(SD_X + 8U, SD_Y + 6U, &Font12, fg, bg, badge);
 
-  Pad(p, sizeof(p), (sd->file != NULL) ? sd->file : "--", 18);
+  Pad(p, sizeof(p), (sd->file != NULL) ? sd->file : "--", 25);   /* T3P3_20261118_1705_12.txt */
   Text(SD_X + 94U, SD_Y + 6U, &Font12, C_TEXT, C_PANEL, p);
 
   Fill(SD_X + SD_W - 44U, SD_Y + 3U, 42U, 16U, C_PANEL);

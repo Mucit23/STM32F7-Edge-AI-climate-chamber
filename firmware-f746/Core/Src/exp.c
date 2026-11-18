@@ -25,7 +25,7 @@
 #include <string.h>
 
 #define EXP_MAGIC        0x31505845UL     /* "EXP1" */
-#define EXP_VERSION      1U
+#define EXP_VERSION      2U               /* 2: file_t0 eklendi (1 de okunur) */
 #define EXP_ADDR_A       0x0100U
 #define EXP_ADDR_B       0x0140U
 #define EXP_REC_SIZE     60U
@@ -47,6 +47,7 @@ static struct
   uint32_t   paused_total;
   uint16_t   seq;
   Exp_Params pr;
+  uint32_t   file_t0;      /* asamanin ilk baslangici: dosya adi (kesintide kaydirilmaz) */
 } R;
 
 static AT24C32_HandleTypeDef hee;
@@ -82,6 +83,29 @@ static uint32_t Epoch(const DS3231_TimeDate *r)
   days += cum[m - 1U] + (uint32_t)((r->date >= 1U) ? r->date - 1U : 0U);
   if (m > 2U && (y % 4U) == 0U) days++;
   return days * 86400U + r->hours * 3600U + r->minutes * 60U + r->seconds;
+}
+
+/* Epoch (2000'den beri saniye) -> takvim */
+static void FromEpoch(uint32_t e, uint16_t *yyyy, uint8_t *mo, uint8_t *dd, uint8_t *hh, uint8_t *mi)
+{
+  static const uint8_t mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  uint32_t days = e / 86400U, rem = e % 86400U;
+  uint16_t y = 2000U;
+  uint8_t  m = 0U;
+  for (;;)
+  {
+    uint32_t yl = ((y % 4U) == 0U) ? 366U : 365U;
+    if (days < yl) break;
+    days -= yl; y++;
+  }
+  for (;;)
+  {
+    uint32_t ml = mdays[m] + ((m == 1U && (y % 4U) == 0U) ? 1U : 0U);
+    if (days < ml || m >= 11U) break;
+    days -= ml; m++;
+  }
+  *yyyy = y; *mo = (uint8_t)(m + 1U); *dd = (uint8_t)(days + 1U);
+  *hh = (uint8_t)(rem / 3600U); *mi = (uint8_t)((rem % 3600U) / 60U);
 }
 
 static uint32_t Tod(const DS3231_TimeDate *r)
@@ -123,6 +147,7 @@ static void Pack(uint8_t *b0)
   b = P8(b, R.pr.p5_days); b = P8(b, R.pr.p5_sp_c);
   b = P8(b, R.pr.p6_aprbs_h); b = P8(b, R.pr.p6_closed_h);
   b = P16(b, R.pr.kp); b = P16(b, R.pr.ti_s);
+  b = P32(b, R.file_t0);                       /* 57. bayt; CRC 58-59 */
   (void)b;
   uint16_t c = Crc16(b0, EXP_REC_SIZE - 2U);
   b0[EXP_REC_SIZE - 2U] = (uint8_t)c;
@@ -136,7 +161,7 @@ static uint8_t Unpack(const uint8_t *b0, uint16_t *seq_out)
   uint16_t c = (uint16_t)(b0[EXP_REC_SIZE - 2U] | (b0[EXP_REC_SIZE - 1U] << 8));
   if (Crc16(b0, EXP_REC_SIZE - 2U) != c) return 0U;
   b = G32(b, &magic); b = G8(b, &ver);
-  if (magic != EXP_MAGIC || ver != EXP_VERSION) return 0U;
+  if (magic != EXP_MAGIC || (ver != 1U && ver != EXP_VERSION)) return 0U;
   b = G8(b, &R.state); b = G8(b, &R.full); b = G8(b, &R.stage); b = G8(b, &R.proc);
   b = G32(b, &R.seed); b = G32(b, &R.proc_start); b = G16(b, &R.step_idx);
   b = G32(b, &R.paused_at); b = G32(b, &R.paused_total); b = G16(b, &R.seq);
@@ -147,6 +172,8 @@ static uint8_t Unpack(const uint8_t *b0, uint16_t *seq_out)
   b = G8(b, &R.pr.p5_days); b = G8(b, &R.pr.p5_sp_c);
   b = G8(b, &R.pr.p6_aprbs_h); b = G8(b, &R.pr.p6_closed_h);
   b = G16(b, &R.pr.kp); b = G16(b, &R.pr.ti_s);
+  if (ver >= 2U) b = G32(b, &R.file_t0);
+  else           R.file_t0 = R.proc_start;     /* eski kayit */
   (void)b;
   *seq_out = R.seq;
   return 1U;
@@ -196,6 +223,23 @@ static void Comment(const char *fmt_line)
   printf("%s\r\n", fmt_line);
 }
 
+/* Deney dosyasinin adi: P1_20261118_1705, tam protokolde T1P1_20261118_1705.
+ * Calisan / duraklatilmis deney yoksa gunluk dosyaya donulur. */
+static void LogSession(void)
+{
+  char name[SDLOG_SESSION_MAX + 1U];
+  uint16_t y; uint8_t mo, d, h, mi;
+  if ((R.state != EXP_RUNNING && R.state != EXP_PAUSED) || R.proc == EXP_P_NONE || R.proc >= EXP_P_COUNT)
+  {
+    SdLog_SetSession(NULL);
+    return;
+  }
+  FromEpoch(R.file_t0, &y, &mo, &d, &h, &mi);
+  if (R.full) snprintf(name, sizeof(name), "T%uP%u_%04u%02u%02u_%02u%02u", R.stage + 1U, R.proc, y, mo, d, h, mi);
+  else        snprintf(name, sizeof(name), "P%u_%04u%02u%02u_%02u%02u", R.proc, y, mo, d, h, mi);
+  SdLog_SetSession(name);
+}
+
 static void ParamText(char *s, uint32_t n, Exp_Proc p)
 {
   const Exp_Params *q = &R.pr;
@@ -225,10 +269,17 @@ static void BeginProc(Exp_Proc p, uint32_t now, const DS3231_TimeDate *rtc)
   char s[96], prm[72];
   R.proc = p;
   R.proc_start = now;
+  R.file_t0 = now;
   R.paused_total = 0;
   R.step_idx = 0;
   tod_at_start = Tod(rtc);
   ResetControllers();
+  LogSession();                    /* once yeni dosya, sonra aciklamalar */
+  if (R.full && R.stage == 0U)
+  {
+    snprintf(s, sizeof(s), "# TAM PROTOKOL BASLADI: %u asama", FULL_STAGES);
+    Comment(s);
+  }
   ParamText(prm, sizeof(prm), p);
   if (R.full) snprintf(s, sizeof(s), "# DENEY ASAMA %u/%u: %s, %s", R.stage + 1U, FULL_STAGES, Exp_ProcName(p), prm);
   else        snprintf(s, sizeof(s), "# DENEY BASLADI: %s, %s", Exp_ProcName(p), prm);
@@ -279,6 +330,7 @@ void Exp_Init(I2C_HandleTypeDef *hi2c, const DS3231_TimeDate *rtc, uint8_t rtc_o
   printf("EXP: %s, %s\r\n", Exp_StateName(st.state), Exp_ProcName(st.proc));
   ResetControllers();
   need_resume = (R.state == EXP_RUNNING || R.state == EXP_PAUSED) ? 1U : 0U;
+  LogSession();                    /* kesinti sonrasi: ayni deney dosyasina devam */
   if (need_resume && rtc_ok)
   {
     tod_at_start = Tod(rtc);
@@ -296,12 +348,6 @@ uint8_t Exp_Start(uint8_t program, const DS3231_TimeDate *rtc)
   R.seed  = (now * 2654435761UL) ^ 0xA5A5F00DUL;
   if (R.seed == 0U) R.seed = 1U;
   R.state = EXP_RUNNING;
-  if (R.full)
-  {
-    char s[64];
-    snprintf(s, sizeof(s), "# TAM PROTOKOL BASLADI: %u asama", FULL_STAGES);
-    Comment(s);
-  }
   BeginProc(R.full ? full_stages[0] : (Exp_Proc)program, now, rtc);
   Save();
 
@@ -320,6 +366,7 @@ void Exp_Stop(void)
   R.proc  = EXP_P_NONE;
   R.full  = 0;
   Save();
+  LogSession();                    /* gunluk dosyaya don */
   Peltier_SetCommand(0);
   st.state = EXP_IDLE;
   st.proc  = EXP_P_NONE;
@@ -412,6 +459,9 @@ void Exp_Task1Hz(const Exp_Inputs *in, const DS3231_TimeDate *rtc, uint8_t rtc_o
   {
     if (R.full && (uint8_t)(R.stage + 1U) < FULL_STAGES)
     {
+      char s[64];
+      snprintf(s, sizeof(s), "# ASAMA %u/%u TAMAMLANDI: %s", R.stage + 1U, FULL_STAGES, Exp_ProcName((Exp_Proc)R.proc));
+      Comment(s);
       R.stage++;
       BeginProc(full_stages[R.stage], now, rtc);
       Save();
@@ -422,6 +472,7 @@ void Exp_Task1Hz(const Exp_Inputs *in, const DS3231_TimeDate *rtc, uint8_t rtc_o
       Comment(R.full ? "# TAM PROTOKOL TAMAMLANDI" : "# DENEY TAMAMLANDI");
       R.state = EXP_DONE;
       Save();
+      LogSession();                /* deney dosyasini kapat, gunluk dosyaya don */
       st.state = EXP_DONE;
       st.u = 0;
       Peltier_SetCommand(0);

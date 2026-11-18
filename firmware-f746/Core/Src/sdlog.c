@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
   * @file    sdlog.c
-  * @brief   SD karta gunluk metin (TXT) log kaydi - FatFs
+  * @brief   SD karta metin (TXT) log kaydi - FatFs
+  *           Deney dosyasi (P1_YYYYMMDD_HHMM.txt) ya da gunluk dosya (LOG_YYYYMMDD.txt)
   *
   *  Dosya acma nedenleri ve dosyaya yazilan isaret satirlari:
   *   START   : KAYIT BASLAT                 -> "# KAYIT BASLADI"
@@ -9,6 +10,7 @@
   *   REINSERT: kart cikip takildi / hata     -> "# DEVAM: kart yeniden baglandi"
   *   NEWDAY  : gece yarisi gecisi            -> "# GUN DEVAMI: onceki dosya ..."
   *   OVERFLOW: dosya 86400 satira ulasti     -> "# DEVAM: onceki dosya sinira ulasti"
+  *   SWITCH  : deney basladi / bitti         -> "# DENEY KAYDI" / "# GUNLUK KAYIT"
   *  Yeni olusturulan dosyaya once baslik ve sutun satiri yazilir.
   ******************************************************************************
   */
@@ -26,7 +28,7 @@
 extern SD_HandleTypeDef hsd1;
 extern Disk_drvTypeDef  disk;      /* ff_gen_drv.c: surucu tablosu */
 
-typedef enum { OPEN_START = 0, OPEN_RESUME, OPEN_REINSERT, OPEN_NEWDAY, OPEN_OVERFLOW } OpenReason;
+typedef enum { OPEN_START = 0, OPEN_RESUME, OPEN_REINSERT, OPEN_NEWDAY, OPEN_OVERFLOW, OPEN_SWITCH } OpenReason;
 
 static SdLog_Info info;
 static FIL        logf;
@@ -40,6 +42,10 @@ static uint8_t    have_retry;
 
 static uint8_t    f_year, f_mon, f_day;   /* acik dosyanin tarihi (yy, mm, dd) */
 static uint8_t    f_part;                  /* 1 = LOG_YYYYMMDD.txt, 2.. = _2, _3   */
+
+static char       sess[SDLOG_SESSION_MAX + 1U];  /* deney dosyasi adi ("" = gunluk)   */
+static char       prev_file[32];                 /* kapatilan dosya (gecis isareti)   */
+static uint8_t    switch_pending;                /* dosya ad degisimiyle kapatildi     */
 
 static char      cmt_q[SDLOG_CMT_N][104];   /* aciklama satiri kuyrugu */
 static uint8_t   cmt_head, cmt_cnt;
@@ -56,8 +62,13 @@ static void Stamp(char *buf, size_t n, const DS3231_TimeDate *r)
 
 static void MakeName(char *buf, size_t n, uint8_t yy, uint8_t mm, uint8_t dd, uint8_t part)
 {
-  if (part <= 1U) snprintf(buf, n, "LOG_20%02u%02u%02u.txt", yy, mm, dd);
-  else            snprintf(buf, n, "LOG_20%02u%02u%02u_%u.txt", yy, mm, dd, part);
+  if (sess[0] != '\0')
+  {
+    if (part <= 1U) snprintf(buf, n, "%s.txt", sess);
+    else            snprintf(buf, n, "%s_%u.txt", sess, part);
+  }
+  else if (part <= 1U) snprintf(buf, n, "LOG_20%02u%02u%02u.txt", yy, mm, dd);
+  else                 snprintf(buf, n, "LOG_20%02u%02u%02u_%u.txt", yy, mm, dd, part);
 }
 
 static uint8_t SameDay(const DS3231_TimeDate *r)
@@ -178,7 +189,7 @@ static uint8_t Mount(void)
  * prev: NEWDAY/OVERFLOW icin onceki dosyanin adi (isaret satirinda). */
 static uint8_t OpenLog(const DS3231_TimeDate *rtc, OpenReason why, const char *prev)
 {
-  char line[112], ts[24], name[24];
+  char line[128], ts[24], name[32];
   FILINFO fno;
   FRESULT fr;
   uint8_t is_new;
@@ -197,7 +208,7 @@ static uint8_t OpenLog(const DS3231_TimeDate *rtc, OpenReason why, const char *p
     file_open = 1U;
 
     info.records = is_new ? 0U : CountRecords();
-    if (info.records < SDLOG_MAX_RECORDS || part >= 9U) break;
+    if (info.records < SDLOG_MAX_RECORDS || part >= (sess[0] ? 99U : 9U)) break;
 
     (void)f_close(&logf);                    /* dolu: LOG_..._2.txt, _3 ... */
     file_open = 0;
@@ -209,8 +220,8 @@ static uint8_t OpenLog(const DS3231_TimeDate *rtc, OpenReason why, const char *p
 
   if (is_new)
   {
-    snprintf(line, sizeof(line), "# Edge AI test duzenegi - %s (gunluk kayit, ornekleme 1 s, en fazla %lu satir)",
-             name, (unsigned long)SDLOG_MAX_RECORDS);
+    snprintf(line, sizeof(line), "# Edge AI test duzenegi - %s (%s, ornekleme 1 s, dosya basina en fazla %lu satir)",
+             name, sess[0] ? "deney kaydi" : "gunluk kayit", (unsigned long)SDLOG_MAX_RECORDS);
     fr = PutLine(line);
     if (fr == FR_OK) fr = PutLine(SDLOG_COLUMNS);
     if (fr != FR_OK) { Fail("baslik yazma", fr); return 0; }
@@ -222,6 +233,8 @@ static uint8_t OpenLog(const DS3231_TimeDate *rtc, OpenReason why, const char *p
     case OPEN_RESUME:   snprintf(line, sizeof(line), "# DEVAM: enerji kesintisi sonrasi, %s", ts); break;
     case OPEN_REINSERT: snprintf(line, sizeof(line), "# DEVAM: kart yeniden baglandi, %s", ts); break;
     case OPEN_NEWDAY:   snprintf(line, sizeof(line), "# GUN DEVAMI: onceki dosya %s, %s", prev ? prev : "--", ts); break;
+    case OPEN_SWITCH:   snprintf(line, sizeof(line), sess[0] ? "# DENEY KAYDI: onceki dosya %s, %s" : "# GUNLUK KAYIT: deney bitti, onceki dosya %s, %s",
+                                 prev ? prev : "--", ts); break;
     default:            snprintf(line, sizeof(line), "# DEVAM: %s %lu satir sinirina ulasti, %s",
                                  prev ? prev : "--", (unsigned long)SDLOG_MAX_RECORDS, ts); break;
   }
@@ -246,7 +259,7 @@ static uint8_t OpenLog(const DS3231_TimeDate *rtc, OpenReason why, const char *p
 /* Acik dosyayi bir aciklama satiriyla kapatir */
 static void CloseLog(const char *why, const DS3231_TimeDate *rtc, uint8_t rtc_ok)
 {
-  char line[80], ts[24];
+  char line[96], ts[24];
   if (!file_open) return;
   if (rtc_ok) Stamp(ts, sizeof(ts), rtc); else snprintf(ts, sizeof(ts), "saat yok");
   snprintf(line, sizeof(line), "# %s: %s, dosyada %lu kayit", why, ts, (unsigned long)info.records);
@@ -259,8 +272,8 @@ static void CloseLog(const char *why, const DS3231_TimeDate *rtc, uint8_t rtc_ok
 /* Gun degistiyse eski dosyayi kapatip yeni gunun dosyasini acar */
 static void CheckNewDay(const DS3231_TimeDate *rtc)
 {
-  char prev[24];
-  if (!file_open || SameDay(rtc)) return;
+  char prev[32];
+  if (!file_open || sess[0] != '\0' || SameDay(rtc)) return;   /* deney dosyasi gun degisiminde bolunmez */
   snprintf(prev, sizeof(prev), "%s", info.file);
   CloseLog("GUN SONU", rtc, 1U);
   if (!OpenLog(rtc, OPEN_NEWDAY, prev)) Unmount();
@@ -276,7 +289,30 @@ void SdLog_Init(void)
   have_retry = 0;
   cmt_head = cmt_cnt = 0;
   f_part = 1U;
+  sess[0] = '\0';
+  switch_pending = 0U;
   info.state = SDLOG_NO_CARD;
+}
+
+void SdLog_SetSession(const char *base)
+{
+  const char *b = (base != NULL) ? base : "";
+  if (strncmp(b, sess, SDLOG_SESSION_MAX) == 0) return;
+  if (file_open)
+  {
+    /* bekleyen aciklamalar (or. "# DENEY TAMAMLANDI") eski dosyada kalsin */
+    if (FlushComments() != FR_OK) { Fail("aciklama yazma", FR_DISK_ERR); Unmount(); }
+    else
+    {
+      snprintf(prev_file, sizeof(prev_file), "%s", info.file);
+      CloseLog(b[0] ? "DOSYA KAPANDI (deney kaydina geciliyor)" : "DENEY DOSYASI KAPANDI",
+               &last_rtc, last_rtc_ok);
+      switch_pending = 1U;
+    }
+  }
+  snprintf(sess, sizeof(sess), "%s", b);
+  f_part = 1U;
+  printf("SD: kayit dosyasi -> %s\r\n", sess[0] ? sess : "gunluk (LOG_YYYYMMDD)");
 }
 
 void SdLog_Task(uint8_t active, const DS3231_TimeDate *rtc, uint8_t rtc_ok)
@@ -306,6 +342,7 @@ void SdLog_Task(uint8_t active, const DS3231_TimeDate *rtc, uint8_t rtc_ok)
   {
     if (file_open) CloseLog("DURDU", rtc, rtc_ok);
     session_opened = 0;
+    switch_pending = 0U;
     have_retry = 0U;
     info.state = SDLOG_IDLE;
     return;
@@ -338,8 +375,9 @@ void SdLog_Task(uint8_t active, const DS3231_TimeDate *rtc, uint8_t rtc_ok)
 
   {
     OpenReason why = !session_opened ? (LogCtrl_WasResumed() ? OPEN_RESUME : OPEN_START)
-                                     : OPEN_REINSERT;
-    if (!OpenLog(rtc, why, NULL))
+                                     : (switch_pending ? OPEN_SWITCH : OPEN_REINSERT);
+    if (OpenLog(rtc, why, (why == OPEN_SWITCH) ? prev_file : NULL)) switch_pending = 0U;
+    else
     {
       Unmount();                             /* bir sonraki denemede bastan baglan */
     }
@@ -362,7 +400,7 @@ void SdLog_WriteLine(const char *line, const DS3231_TimeDate *rtc)
   /* Dosya siniri: LOG_..._2.txt ile devam */
   if (info.records >= SDLOG_MAX_RECORDS)
   {
-    char prev[24];
+    char prev[32];
     snprintf(prev, sizeof(prev), "%s", info.file);
     CloseLog("DOSYA DOLU", rtc, 1U);
     if (!OpenLog(rtc, OPEN_OVERFLOW, prev)) { Unmount(); return; }

@@ -3,7 +3,16 @@
   * @file    sdlog.h
   * @brief   SD karta gunluk metin (TXT) log kaydi - FatFs
   *
-  *  Dosya adi RTC tarihinden: LOG_YYYYMMDD.txt (ornek LOG_20261116.txt).
+  *  Iki kayit turu vardir:
+ *
+ *  1) Deney dosyasi (deney calisirken): exp.c SdLog_SetSession() ile ad verir,
+ *     ornek P1_20261118_1705.txt (deney ve baslangic zamani). Tam protokolde
+ *     her asama ayri dosyadir: T1P1_..., T2P2_..., T3P3_... Gece yarisinda
+ *     dosya degismez; SDLOG_MAX_RECORDS satirda P1_..._2.txt ile devam edilir.
+ *     Enerji kesintisinden sonra ayni dosyanin sonuna eklenir.
+ *
+ *  2) Gunluk dosya (deney yokken, KAYIT BASLAT ile):
+ *  Dosya adi RTC tarihinden: LOG_YYYYMMDD.txt (ornek LOG_20261116.txt).
   *  - Kayit gun icinde ne zaman baslarsa baslasin o gunun dosyasina eklenir
   *    (ayni gun birden fazla baslat/durdur -> ayni dosya, "#" isaretleriyle).
   *  - Gece 00:00'da dosya kapatilir, yeni gunun dosyasi acilir.
@@ -43,7 +52,7 @@ typedef struct
 {
   SdLog_State state;
   uint8_t     present;
-  char        file[24];      /* acik / acilacak dosya adi, ya da "--"  */
+  char        file[32];      /* acik / acilacak dosya adi, ya da "--"  */
   uint32_t    records;       /* dosyadaki veri satiri                   */
   uint32_t    size_kb;
   uint32_t    free_mb;
@@ -62,6 +71,13 @@ const char       *SdLog_FileName(void);
  * kuyrukta bekler (en fazla SDLOG_CMT_N), dosya acilinca yazilir. */
 void              SdLog_Comment(const char *line);
 #define SDLOG_CMT_N     6U
+
+/* Deney dosyasi: base = "P1_20261118_1705" (uzantisiz, en fazla 20 karakter),
+ * NULL ya da "" = gunluk dosyaya don. Ad degisirse acik dosya, kuyruktaki
+ * aciklamalar yazildiktan sonra kapatilir; yeni dosya bir sonraki
+ * SdLog_Task'ta acilir. Ayni ad tekrar verilirse bir sey yapilmaz. */
+void              SdLog_SetSession(const char *base);
+#define SDLOG_SESSION_MAX  20U
 
 /* FatFs get_fattime() icin (fatfs.c'den cagrilir) */
 uint32_t          SdLog_FatTime(void);
