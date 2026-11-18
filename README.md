@@ -27,9 +27,14 @@ kontrolcü testleri için kullanılır.
 ```
 firmware-f746/      STM32F746G-DISCO ana kontrol yazılımı (Keil MDK, CubeMX)
 firmware-peltier/   STM32F072 Peltier sürücü kartı yazılımı
-web/                Uzaktan izleme sayfası (Adafruit IO verisi)
-docs/               Test protokolü, bağlantı şemaları, notlar
+docs/               Uzaktan izleme sayfası (index.html, GitHub Pages) ve belgeler
 ```
+
+## Uzaktan izleme
+`docs/index.html` tek dosyalık bir web sayfası. Adafruit IO'daki `iklim` grubunun son
+değerlerini 20 s'de bir, grafik verisini 5 dakikada bir REST API'den okur. Sayfa
+anahtarsız çalışır, bunun için grup ve feed'ler Adafruit IO'da public olmalı.
+Yayın: GitHub Pages, `main` dalı, `/docs` klasörü.
 
 ## firmware-f746
 

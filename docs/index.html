@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İklim Kabini İzleme</title>
+<meta name="description" content="STM32F7 Edge AI iklim kabininin canlı ölçümleri (Adafruit IO).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
+<style>
+  /* Renkler kartin LCD arayuzuyle (ui.c) ayni */
+  :root {
+    --bg:      #0B1220;
+    --header:  #16213A;
+    --panel:   #141D30;
+    --edge:    #22304C;
+    --text:    #E6ECF5;
+    --muted:   #8C9BB5;
+    --ok:      #2ECC71;
+    --warn:    #E67E22;
+    --err:     #E74C3C;
+    --cool:    #3FA9F5;
+    --heat:    #F5A35C;
+    --hum:     #5DADE2;
+    --wall:    #C39BD3;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 40px; }
+
+  /* ---- baslik: LCD'deki gibi koyu lacivert serit ---- */
+  header.bar {
+    background: var(--header); border-bottom: 1px solid var(--edge);
+  }
+  header.bar .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding-top: 10px; padding-bottom: 10px;
+  }
+  .conn { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok  { background: var(--ok); box-shadow: 0 0 0 4px rgba(46,204,113,.15); }
+  .dot.warn{ background: var(--warn); }
+  .dot.err { background: var(--err); }
+  .conn-text { display: flex; flex-direction: column; min-width: 0; }
+  .conn-title { font-weight: 600; font-size: 15px; }
+  .conn-sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .clock { font: 500 18px/1 var(--mono); color: #9FB3D1; letter-spacing: .02em; white-space: nowrap; }
+
+  /* ---- uyari bandi ---- */
+  .notice {
+    margin: 16px 0 0; padding: 12px 14px; border-radius: 6px;
+    background: #2A1616; border: 1px solid #5A1E1E; color: #FFD0CB; display: none;
+  }
+  .notice.show { display: block; }
+  .notice p { margin: 0 0 8px; }
+  .notice form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .notice input {
+    flex: 1 1 260px; min-width: 0; padding: 8px 10px; border-radius: 4px;
+    border: 1px solid var(--edge); background: var(--bg); color: var(--text); font: 14px var(--mono);
+  }
+  button {
+    font: 500 14px var(--sans); color: var(--text); background: var(--header);
+    border: 1px solid var(--edge); border-radius: 4px; padding: 8px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+
+  /* ---- ana blok: kabin havasi + Peltier cubugu ---- */
+  .hero {
+    margin-top: 16px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px;
+  }
+  .panel { background: var(--panel); border-radius: 6px; padding: 16px 18px; min-width: 0; }
+  .panel h2 { margin: 0 0 6px; font: 500 14px var(--sans); color: var(--muted); }
+  .air { border-left: 4px solid var(--muted); }
+  .air.ok { border-left-color: var(--ok); }
+  .air.stale { border-left-color: var(--warn); }
+  .big { font: 600 clamp(48px, 9vw, 76px)/1 var(--mono); letter-spacing: -.02em; margin: 8px 0 10px; }
+  .big small { font-size: .38em; font-weight: 500; color: #C9D4E5; margin-left: 4px; letter-spacing: 0; }
+  .air-meta { display: flex; gap: 22px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+  .air-meta b { font: 500 16px var(--mono); color: var(--hum); margin-left: 6px; }
+  .air-meta b.sp { color: var(--text); }
+
+  /* Peltier: ortadan iki yone dolan cubuk (sol sogutma, sag isitma) */
+  .pel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .pel-mode { font: 600 22px var(--sans); }
+  .pel-mode.heat { color: var(--heat); }
+  .pel-mode.cool { color: var(--cool); }
+  .pel-mode.off  { color: var(--muted); }
+  .pel-val { font: 600 34px/1 var(--mono); }
+  .pel-bar {
+    position: relative; height: 34px; margin: 18px 0 8px; border-radius: 4px;
+    background: var(--bg); border: 1px solid var(--edge); overflow: hidden;
+  }
+  .pel-bar .fill { position: absolute; top: 0; bottom: 0; width: 0; transition: width .6s ease, left .6s ease; }
+  .pel-bar .mid { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 2px; margin-left: -1px; background: var(--muted); }
+  .pel-scale { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--muted); }
+  .pel-scale .c { color: var(--cool); } .pel-scale .h { color: var(--heat); }
+  .pel-note { margin-top: 10px; color: var(--muted); font-size: 13px; }
+
+  /* ---- yuzey sensorleri ---- */
+  .sensors { margin-top: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .sensor { border-left: 4px solid var(--muted); }
+  .sensor.ok { border-left-color: var(--ok); }
+  .sensor.stale { border-left-color: var(--warn); }
+  .sensor .v { font: 600 34px/1.1 var(--mono); margin-top: 4px; }
+  .sensor .v small { font-size: .45em; color: #C9D4E5; font-weight: 500; margin-left: 3px; }
+  .sensor .where { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  /* ---- deney ---- */
+  .exp { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .exp-text { font: 500 16px var(--mono); overflow-wrap: anywhere; }
+  .exp-text .st-ok { color: var(--ok); } .exp-text .st-warn { color: var(--warn); }
+  .exp-text .st-err { color: var(--err); } .exp-text .st-info { color: var(--cool); }
+  .badge { font: 500 13px var(--sans); padding: 4px 10px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+  .badge.ok { color: var(--ok); } .badge.err { color: var(--err); background: #2A1616; }
+
+  /* ---- grafikler ---- */
+  .charts-head { margin: 28px 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .charts-head h2 { margin: 0; font: 600 18px var(--sans); }
+  .range { display: flex; gap: 4px; }
+  .range button { padding: 6px 12px; }
+  .range button[aria-pressed="true"] { background: var(--cool); border-color: var(--cool); color: #06101E; }
+  .chart { padding: 14px 10px 8px 6px; margin-bottom: 12px; }
+  .chart h3 { margin: 0 0 4px 10px; font: 500 14px var(--sans); color: var(--muted); }
+  .chart .plot { width: 100%; min-height: 220px; }
+  .chart .empty { color: var(--muted); font-size: 14px; padding: 30px 10px; }
+  .uplot, .u-legend { font-family: var(--sans); color: var(--text); }
+  .u-legend { font-size: 13px; }
+  .u-legend .u-marker { border-radius: 2px; }
+  .u-legend th { font-weight: 500; }
+  .u-select { background: rgba(63,169,245,.12); }
+
+  footer { margin-top: 24px; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--hum); }
+
+  @media (max-width: 760px) {
+    .hero { grid-template-columns: 1fr; }
+    .sensors { grid-template-columns: 1fr; }
+    .sensors .panel { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .sensor .v { font-size: 28px; }
+    .clock { font-size: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pel-bar .fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="conn">
+      <span class="dot" id="dot"></span>
+      <div class="conn-text">
+        <span class="conn-title" id="connTitle">Bağlanıyor…</span>
+        <span class="conn-sub" id="connSub">Adafruit IO'dan veri bekleniyor</span>
+      </div>
+    </div>
+    <div class="clock" id="clock">--.--.---- --:--:--</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice" id="notice" role="alert">
+    <p id="noticeText"></p>
+    <form id="keyForm" hidden>
+      <input id="keyInput" type="password" autocomplete="off" placeholder="Adafruit IO anahtarı (aio_…)">
+      <button type="submit">Anahtarı kaydet</button>
+    </form>
+  </div>
+
+  <section class="hero">
+    <div class="panel air" id="airPanel">
+      <h2>Kabin havası (DHT22)</h2>
+      <div class="big" id="airT">--.-<small>°C</small></div>
+      <div class="air-meta">
+        <span>Bağıl nem<b id="airRH">--.- %</b></span>
+        <span>Set değeri<b class="sp" id="sp">yok</b></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="pel-head">
+        <h2>Peltier çıkışı</h2>
+        <span class="pel-mode off" id="pelMode">Kapalı</span>
+      </div>
+      <div class="pel-head">
+        <span class="pel-val" id="pelVal">0.0 %</span>
+      </div>
+      <div class="pel-bar" aria-hidden="true">
+        <div class="fill" id="pelFill"></div>
+        <div class="mid"></div>
+      </div>
+      <div class="pel-scale"><span class="c">−100 soğutma</span><span>0</span><span class="h">ısıtma +100</span></div>
+    </div>
+  </section>
+
+  <section class="sensors">
+    <div class="panel sensor" id="s-t-peltier">
+      <div><h2>Peltier yüzeyi</h2><div class="where">iç soğutucu tabanı, D3</div></div>
+      <div class="v">--.--<small>°C</small></div>
+    </div>
+    <div class="panel sensor" id="s-t-wall">
+      <div><h2>Karşı duvar</h2><div class="where">duvar yüzeyi, D4</div></div>
+      <div class="v">--.--<small>°C</small></div>
+    </div>
+    <div class="panel sensor" id="s-t-ambient">
+      <div><h2>Dış ortam</h2><div class="where">dolap dışı, D2</div></div>
+      <div class="v">--.--<small>°C</small></div>
+    </div>
+  </section>
+
+  <section class="panel exp">
+    <div>
+      <h2>Deney</h2>
+      <div class="exp-text" id="expText">--</div>
+    </div>
+    <span class="badge ok" id="safety">Güvenlik normal</span>
+  </section>
+
+  <div class="charts-head">
+    <h2>Geçmiş</h2>
+    <div class="range" role="group" aria-label="Zaman aralığı">
+      <button type="button" data-h="6">6 saat</button>
+      <button type="button" data-h="24" aria-pressed="true">24 saat</button>
+      <button type="button" data-h="168">7 gün</button>
+      <button type="button" data-h="720">30 gün</button>
+    </div>
+  </div>
+
+  <section class="panel chart"><h3>Sıcaklıklar (°C)</h3><div class="plot" id="pTemp"></div></section>
+  <section class="panel chart"><h3>Peltier komutu (%)</h3><div class="plot" id="pU"></div></section>
+  <section class="panel chart"><h3>Bağıl nem (%)</h3><div class="plot" id="pRH"></div></section>
+
+  <footer>
+    Veriler kabindeki STM32F746G-DISCO kartından 20 saniyede bir Adafruit IO'ya gönderilir, bu sayfa 20 saniyede bir yenilenir.
+    Kalıcı 1 saniyelik kayıt kabindeki SD karttadır.
+    <a href="https://github.com/Mucit23/STM32F7-Edge-AI-climate-chamber">Proje kaynak kodu</a>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
+<script>
+"use strict";
+
+/* ---------------- Ayarlar ----------------
+ * Adres satirindan degistirilebilir: index.html?user=Mucit23&group=iklim */
+const qs = new URLSearchParams(location.search);
+const CFG = {
+  user:  qs.get("user")  || "Mucit23",
+  group: qs.get("group") || "iklim",
+  pollMs: 20000,             /* son degerler */
+  chartMs: 300000,           /* grafikler */
+  staleS: 90                 /* bu kadar sure veri gelmezse "cevrimdisi" */
+};
+const API = "https://io.adafruit.com/api/v2/" + encodeURIComponent(CFG.user) + "/";
+const RANGES = { 6: 1, 24: 5, 168: 30, 720: 120 };   /* saat -> cozunurluk (dk) */
+const SAFETY = ["Güvenlik normal", "Hava sıcaklığı sınırda", "Peltier yüzeyi sınırda", "Hava sensörü okunamıyor"];
+
+let rangeH = 24;
+let last = {};               /* kisa feed adi -> {value, t} */
+let lastUpdate = 0;          /* en yeni verinin zamani (ms) */
+let failCount = 0;
+
+/* ---------------- Yardimcilar ---------------- */
+const $ = (id) => document.getElementById(id);
+function getKey() { try { return localStorage.getItem("aio_key") || ""; } catch (e) { return ""; } }
+function setKey(k) { try { k ? localStorage.setItem("aio_key", k) : localStorage.removeItem("aio_key"); } catch (e) {} }
+
+async function api(path) {
+  const key = getKey();
+  const url = API + path + (key ? (path.includes("?") ? "&" : "?") + "x-aio-key=" + encodeURIComponent(key) : "");
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) { const e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+const shortKey = (k) => String(k).split(".").pop();
+const num = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; };
+const fmt = (v, d) => (v === null || v === undefined) ? "--" : v.toFixed(d);
+function ago(s) {
+  if (s < 60) return Math.round(s) + " sn önce";
+  if (s < 3600) return Math.round(s / 60) + " dk önce";
+  if (s < 86400) return Math.round(s / 3600) + " saat önce";
+  return Math.round(s / 86400) + " gün önce";
+}
+const pad = (n) => String(n).padStart(2, "0");
+
+function notice(text, askKey) {
+  $("notice").classList.toggle("show", !!text);
+  $("noticeText").textContent = text || "";
+  $("keyForm").hidden = !askKey;
+}
+
+/* ---------------- Son degerler ---------------- */
+async function poll() {
+  try {
+    const g = await api("groups/" + encodeURIComponent(CFG.group));
+    last = {};
+    lastUpdate = 0;
+    for (const f of g.feeds || []) {
+      const t = Date.parse(f.updated_at || f.last_value_at || 0) || 0;
+      last[shortKey(f.key)] = { value: f.last_value, t };
+      if (t > lastUpdate) lastUpdate = t;
+    }
+    failCount = 0;
+    notice("");
+    render();
+  } catch (e) {
+    failCount++;
+    if (e.status === 404 || e.status === 401 || e.status === 403) {
+      notice("“" + CFG.group + "” grubu okunamadı. Adafruit IO'da grup ve içindeki feed'ler herkese açık (public) değilse sayfa veriyi göremez. " +
+             "Ya grubu ve feed'leri public yapın ya da anahtarınızı bu tarayıcıya kaydedin (anahtar yalnızca bu cihazda saklanır).", true);
+    } else {
+      notice("Adafruit IO'ya ulaşılamadı (" + e.message + "). İnternet bağlantısını kontrol edin, sayfa 20 saniye sonra yeniden deneyecek.", false);
+    }
+    renderConn();
+  }
+}
+
+function sensor(id, key, d) {
+  const el = $(id), f = last[key], v = f ? num(f.value) : null;
+  const fresh = f && (Date.now() - f.t) / 1000 < CFG.staleS * 2;
+  el.classList.toggle("ok", v !== null && fresh);
+  el.classList.toggle("stale", v !== null && !fresh);
+  el.querySelector(".v").innerHTML = fmt(v, d) + "<small>°C</small>";
+}
+
+function render() {
+  /* kabin havasi */
+  const a = last["t-air"], t = a ? num(a.value) : null;
+  const aFresh = a && (Date.now() - a.t) / 1000 < CFG.staleS * 2;
+  $("airT").innerHTML = fmt(t, 1) + "<small>°C</small>";
+  $("airPanel").classList.toggle("ok", t !== null && aFresh);
+  $("airPanel").classList.toggle("stale", t !== null && !aFresh);
+  const rh = last["rh"] ? num(last["rh"].value) : null;
+  $("airRH").textContent = fmt(rh, 1) + " %";
+  const sp = last["setpoint"], spv = sp ? num(sp.value) : null;
+  /* set degeri yalnizca kapali cevrimde gonderilir; son 2 dk'da gelmediyse "yok" */
+  $("sp").textContent = (spv !== null && (Date.now() - sp.t) / 1000 < 120) ? spv.toFixed(1) + " °C" : "yok";
+
+  sensor("s-t-peltier", "t-peltier", 2);
+  sensor("s-t-wall", "t-wall", 2);
+  sensor("s-t-ambient", "t-ambient", 2);
+
+  /* Peltier */
+  const u = last["u-cmd"] ? num(last["u-cmd"].value) : null;
+  const uu = u === null ? 0 : Math.max(-100, Math.min(100, u));
+  const mode = $("pelMode"), fill = $("pelFill");
+  $("pelVal").textContent = (u === null ? "--" : (uu > 0 ? "+" : "") + uu.toFixed(1)) + " %";
+  mode.className = "pel-mode " + (uu > 0 ? "heat" : uu < 0 ? "cool" : "off");
+  mode.textContent = uu > 0 ? "Isıtma" : uu < 0 ? "Soğutma" : "Kapalı";
+  const w = Math.abs(uu) / 2;            /* yarim cubuk = %100 */
+  fill.style.width = w + "%";
+  fill.style.left = (uu >= 0 ? 50 : 50 - w) + "%";
+  fill.style.background = uu >= 0 ? "var(--heat)" : "var(--cool)";
+
+  /* deney */
+  const st = last["status"] ? String(last["status"].value) : "";
+  const box = $("expText");
+  box.textContent = "";
+  if (!st) box.textContent = "--";
+  else if (st === "BOSTA") box.textContent = "Çalışan deney yok";
+  else {
+    const parts = st.split(" | ");
+    parts.forEach((p, i) => {
+      const s = document.createElement("span");
+      s.textContent = (i ? " | " : "") + p;
+      if (/CALISIYOR/.test(p)) s.className = "st-ok";
+      else if (/DURAKLATILDI/.test(p)) s.className = "st-warn";
+      else if (/TAMAMLANDI/.test(p)) s.className = "st-info";
+      else if (/GUVENLIK/.test(p)) s.className = "st-err";
+      box.appendChild(s);
+    });
+  }
+  const sf = last["safety"] ? (parseInt(last["safety"].value, 10) || 0) : 0;
+  const b = $("safety");
+  b.textContent = SAFETY[sf] || ("Güvenlik kodu " + sf);
+  b.className = "badge " + (sf ? "err" : "ok");
+
+  renderConn();
+}
+
+function renderConn() {
+  const dot = $("dot"), title = $("connTitle"), sub = $("connSub");
+  if (!lastUpdate) {
+    dot.className = "dot" + (failCount ? " err" : "");
+    title.textContent = failCount ? "Veri alınamıyor" : "Bağlanıyor…";
+    sub.textContent = "Adafruit IO grubu: " + CFG.user + "/" + CFG.group;
+    return;
+  }
+  const age = (Date.now() - lastUpdate) / 1000;
+  if (age < CFG.staleS) {
+    dot.className = "dot ok";
+    title.textContent = "Kabin çevrimiçi";
+  } else {
+    dot.className = "dot err";
+    title.textContent = "Kabinden veri gelmiyor";
+  }
+  sub.textContent = "Son veri " + ago(age);
+}
+
+function tick() {
+  const d = new Date();
+  $("clock").textContent = pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear() + " " +
+                           pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  if (lastUpdate) renderConn();
+}
+
+/* ---------------- Grafikler (uPlot) ---------------- */
+const TR = {
+  MMMM: ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"],
+  MMM:  ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"],
+  WWWW: ["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"],
+  WWW:  ["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"]
+};
+const AXIS = { stroke: "#8C9BB5", grid: { stroke: "#1F2B44", width: 1 }, ticks: { stroke: "#22304C", width: 1 }, font: '12px "IBM Plex Sans", sans-serif' };
+const charts = {};
+
+/* Zaman ekseni: 24 saat bicimi; gun degisiminde tarih de yazilir */
+function timeTicks(u, splits, ax, space, incr) {
+  let prevDay = null;
+  return splits.map((ts) => {
+    const d = new Date(ts * 1000);
+    const day = pad(d.getDate()) + "." + pad(d.getMonth() + 1);
+    if (incr >= 86400) return day;
+    const hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+    const out = (prevDay !== null && day !== prevDay) || (d.getHours() === 0 && d.getMinutes() === 0) ? hm + "\n" + day : hm;
+    prevDay = day;
+    return out;
+  });
+}
+
+async function feedChart(key) {
+  try {
+    const j = await api("feeds/" + encodeURIComponent(CFG.group + "." + key) +
+                        "/data/chart?hours=" + rangeH + "&resolution=" + RANGES[rangeH]);
+    return (j.data || []).map(([d, v]) => [Math.floor(Date.parse(d) / 1000), num(v)]);
+  } catch (e) {
+    return [];                       /* feed yoksa (ornegin setpoint) bos seri */
+  }
+}
+
+/* Farkli feed'lerin zaman damgalarini tek x eksenine birlestirir */
+function join(list) {
+  const xs = new Set();
+  list.forEach((s) => s.forEach(([x]) => xs.add(x)));
+  const x = Array.from(xs).sort((a, b) => a - b);
+  const idx = new Map(x.map((v, i) => [v, i]));
+  return [x].concat(list.map((s) => {
+    const y = new Array(x.length).fill(null);
+    s.forEach(([t, v]) => { y[idx.get(t)] = v; });
+    return y;
+  }));
+}
+
+function draw(id, series, data, opts) {
+  const el = $(id);
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  el.innerHTML = "";
+  if (!data[0].length) {
+    el.innerHTML = '<div class="empty">Bu aralıkta veri yok. Kart veri göndermeye başlayınca grafik burada oluşur.</div>';
+    return;
+  }
+  const o = Object.assign({
+    width: el.clientWidth || 600,
+    height: 240,
+    fmtDate: (tpl) => uPlot.fmtDate(tpl, TR),
+    cursor: { drag: { x: true, y: false } },
+    scales: { x: { time: true } },
+    axes: [Object.assign({ values: timeTicks }, AXIS), Object.assign({ size: 52 }, AXIS)],
+    series: [{ label: "Zaman", value: "{DD}.{MM} {HH}:{mm}" }].concat(series)
+  }, opts || {});
+  charts[id] = new uPlot(o, data, el);
+}
+
+const line = (label, color, extra) => Object.assign({ label, stroke: color, width: 2, spanGaps: true, points: { show: false } }, extra || {});
+
+async function loadCharts() {
+  const keys = ["t-air", "setpoint", "t-peltier", "t-wall", "t-ambient", "u-cmd", "rh"];
+  const res = await Promise.all(keys.map(feedChart));
+  const by = Object.fromEntries(keys.map((k, i) => [k, res[i]]));
+
+  const dT = join([by["t-air"], by["setpoint"], by["t-peltier"], by["t-wall"], by["t-ambient"]]);
+  draw("pTemp", [
+    line("Kabin havası", "#E6ECF5", { value: (u, v) => v == null ? "--" : v.toFixed(1) + " °C" }),
+    line("Set değeri",   "#8C9BB5", { dash: [6, 4], value: (u, v) => v == null ? "--" : v.toFixed(1) + " °C" }),
+    line("Peltier yüzeyi", "#F5A35C", { width: 1.5, value: (u, v) => v == null ? "--" : v.toFixed(2) + " °C" }),
+    line("Karşı duvar",  "#C39BD3", { width: 1.5, value: (u, v) => v == null ? "--" : v.toFixed(2) + " °C" }),
+    line("Dış ortam",    "#5DADE2", { width: 1.5, value: (u, v) => v == null ? "--" : v.toFixed(2) + " °C" })
+  ], dT);
+
+  /* Peltier: isitma (turuncu) ve sogutma (mavi) ayri dolgulu seriler */
+  const u = by["u-cmd"];
+  const dU = [u.map(([x]) => x), u.map(([, v]) => v === null ? null : Math.max(v, 0)), u.map(([, v]) => v === null ? null : Math.min(v, 0))];
+  draw("pU", [
+    line("Isıtma",  "#F5A35C", { fill: "rgba(245,163,92,.25)", width: 1.5, value: (u, v) => v == null ? "--" : v.toFixed(1) + " %" }),
+    line("Soğutma", "#3FA9F5", { fill: "rgba(63,169,245,.25)", width: 1.5, value: (u, v) => v == null ? "--" : v.toFixed(1) + " %" })
+  ], dU, { scales: { x: { time: true }, y: { range: [-100, 100] } } });
+
+  const r = by["rh"];
+  draw("pRH", [line("Bağıl nem", "#5DADE2", { value: (u, v) => v == null ? "--" : v.toFixed(1) + " %" })],
+       [r.map(([x]) => x), r.map(([, v]) => v)]);
+}
+
+/* ---------------- Olaylar ---------------- */
+document.querySelectorAll(".range button").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".range button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+    b.setAttribute("aria-pressed", "true");
+    rangeH = parseInt(b.dataset.h, 10);
+    loadCharts();
+  });
+});
+
+$("keyForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  setKey($("keyInput").value.trim());
+  $("keyInput").value = "";
+  poll(); loadCharts();
+});
+
+let rz;
+window.addEventListener("resize", () => {
+  clearTimeout(rz);
+  rz = setTimeout(() => {
+    Object.entries(charts).forEach(([id, c]) => c.setSize({ width: $(id).clientWidth, height: 240 }));
+  }, 150);
+});
+
+tick(); setInterval(tick, 1000);
+poll(); setInterval(poll, CFG.pollMs);
+loadCharts(); setInterval(loadCharts, CFG.chartMs);
+</script>
+</body>
+</html>
