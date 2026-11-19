@@ -415,12 +415,15 @@ static void RunRefresh(void)
   }
   UI_DrawRow(5, s, UI_TONE_MUTED);
 
-  if (e->closed)
+  if (e->limit && e->state == EXP_RUNNING)    /* yuzey sinirlayicisi kisiyor */
+    snprintf(s, sizeof(s), "Komut   : %+d (ist. %+d, %s SINIRI)", e->u, e->u_req,
+             (e->limit == 1U) ? "ISI" : "SOGUK");
+  else if (e->closed)
     snprintf(s, sizeof(s), "Komut   : %+d  SP %d.%d C (%s)", e->u, e->sp_x10 / 10, e->sp_x10 % 10,
              (e->ctrl == EXP_CTRL_ONOFF) ? "ON/OFF" : "PID");
   else
     snprintf(s, sizeof(s), "Komut   : %+d / 1000  (acik cevrim)", e->u);
-  UI_DrawRow(6, s, UI_TONE_TEXT);
+  UI_DrawRow(6, s, (e->limit && e->state == EXP_RUNNING) ? UI_TONE_WARN : UI_TONE_TEXT);
 
   if ((uint8_t)e->state != run_last_state)
   {

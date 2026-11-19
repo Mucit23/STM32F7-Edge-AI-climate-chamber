@@ -55,6 +55,8 @@ static uint8_t     ee_ok;
 static Exp_Status  st;
 static PID_Ctrl    pid;
 static OnOff_Ctrl  onoff;
+static Lim_Ctrl    lim_heat, lim_cool;              /* Peltier yuzey sinirlayicilari */
+static int16_t     lim_hi = 1000, lim_lo = -1000;   /* son hesaplanan izinler        */
 static uint8_t     last_ctrl = 0xFF;
 static uint8_t     last_closed = 0xFF;
 static uint8_t     need_resume;
@@ -259,6 +261,10 @@ static void ResetControllers(void)
 {
   PID_Init(&pid, (float)R.pr.kp, (float)R.pr.ti_s, 0.0f, -1000.0f, 1000.0f);
   OnOff_Init(&onoff, 0.5f, 1000, -1000);
+  Lim_Init(&lim_heat, EXP_LIM_KP_HEAT, EXP_LIM_TI_S, EXP_LIM_BAND_HEAT_C);
+  Lim_Init(&lim_cool, EXP_LIM_KP_COOL, EXP_LIM_TI_S, EXP_LIM_BAND_COOL_C);
+  lim_hi = 1000;
+  lim_lo = -1000;
   last_ctrl = 0xFF;
   last_closed = 0xFF;
   no_air_s = 0;
@@ -447,7 +453,7 @@ void Exp_Task1Hz(const Exp_Inputs *in, const DS3231_TimeDate *rtc, uint8_t rtc_o
 
   if (R.state == EXP_DONE || R.state == EXP_PAUSED)
   {
-    st.u = 0; st.closed = 0; st.next_change_s = 0;
+    st.u = 0; st.u_req = 0; st.limit = 0; st.closed = 0; st.next_change_s = 0;
     st.elapsed_s  = (R.state == EXP_PAUSED) ? Elapsed(now) : st.duration_s;
     Peltier_SetCommand(0);
     return;
@@ -474,7 +480,7 @@ void Exp_Task1Hz(const Exp_Inputs *in, const DS3231_TimeDate *rtc, uint8_t rtc_o
       Save();
       LogSession();                /* deney dosyasini kapat, gunluk dosyaya don */
       st.state = EXP_DONE;
-      st.u = 0;
+      st.u = 0; st.u_req = 0; st.limit = 0;
       Peltier_SetCommand(0);
       return;
     }
@@ -526,12 +532,33 @@ void Exp_Task1Hz(const Exp_Inputs *in, const DS3231_TimeDate *rtc, uint8_t rtc_o
     }
     else
     {
-      int32_t v = PID_Step(&pid, sp, pv, 1.0f);
+      int32_t v;
+      PID_SetLimits(&pid, (float)lim_lo, (float)lim_hi);   /* sinirlayici altinda integral sismesin */
+      v = PID_Step(&pid, sp, pv, 1.0f);
       if (o.dither) v += Proc_Dither(R.seed, t);
       if (v > 1000) v = 1000;
       if (v < -1000) v = -1000;
       u = (int16_t)v;
     }
+  }
+
+  /* ---- Peltier yuzey sinirlayicisi: istenen komut -> uygulanan komut ---- */
+  {
+    int16_t u_req = u;
+    st.u_req = u_req;
+#if EXP_LIM_ENABLE
+    if (in->peltier_valid)              /* olcum yoksa son izinler korunur */
+    {
+      float ts = (float)in->peltier_x100 / 100.0f;
+      lim_hi =  Lim_Step(&lim_heat, EXP_LIM_HEAT_C - ts, (st.u > 0) ? st.u : 0,
+                         (u_req > 0) ? u_req : 0, 1.0f);
+      lim_lo = (int16_t)-Lim_Step(&lim_cool, ts - EXP_LIM_COOL_C, (st.u < 0) ? (int16_t)-st.u : 0,
+                         (u_req < 0) ? (int16_t)-u_req : 0, 1.0f);
+    }
+#endif
+    if (u > lim_hi) u = lim_hi;
+    if (u < lim_lo) u = lim_lo;
+    st.limit = (u < u_req) ? 1U : ((u > u_req) ? 2U : 0U);
   }
 
 #if EXP_SAFETY_ENABLE

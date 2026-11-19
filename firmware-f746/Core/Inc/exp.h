@@ -32,6 +32,22 @@
 #define EXP_SAFETY_HOLD_S      600U     /* ...ve bu kadar sure sonra devam      */
 #define EXP_NO_AIR_S           30U      /* kapali cevrimde hava olcumu yoksa    */
 
+/* ---------------- Peltier yuzey sinirlayicisi (PI, override) ----------------
+ * Yuzey (D3) sinira yaklasinca deneyin istedigi komut kapatilmaz, kademeli
+ * kisilir: yuzey sinirda tutulur, kabin izin verilen en yuksek guvle calisir.
+ * Deneyin istedigi komut log'da u_req, uygulanan u_cmd sutunundadir.
+ * 80 C tam kapatma (yukarida) son guvenlik olarak kalir.
+ * Ayarlar P1 on testinden: yuzey ~0.9 K/% (isitma), ~0.25 K/% (sogutma),
+ * zaman sabiti ~5 dk. Benzetimde (eski donanim) en fazla ~2 K asim. */
+#define EXP_LIM_ENABLE         1
+#define EXP_LIM_HEAT_C         70.0f    /* isitmada yuzey ust siniri            */
+#define EXP_LIM_COOL_C         1.0f     /* sogutmada yuzey alt siniri (buzlanma) */
+#define EXP_LIM_KP_HEAT        40.0f    /* komut/C  (4 %/K)                     */
+#define EXP_LIM_KP_COOL        100.0f   /* komut/C  (10 %/K)                    */
+#define EXP_LIM_TI_S           300.0f
+#define EXP_LIM_BAND_HEAT_C    6.0f     /* 64 C'de devreye girer                */
+#define EXP_LIM_BAND_COOL_C    4.0f     /* 5 C'de devreye girer                 */
+
 /* ---------------- Hizli test modu ----------------
  * 1 yapilirsa tum sureler EXP_FAST_DIV'e bolunur (karta ilk denemede tum
  * protokolu birkac saatte gormek icin). Gercek test icin 0 olmali. */
@@ -113,6 +129,8 @@ typedef struct
   Exp_Proc   proc;
   uint16_t   phase;         /* adim / segment numarasi             */
   int16_t    u;             /* uygulanan Peltier komutu            */
+  int16_t    u_req;         /* deneyin istedigi komut (sinirlayici oncesi) */
+  uint8_t    limit;         /* 0: yok, 1: isitma sinirli, 2: sogutma sinirli */
   uint8_t    closed;        /* 1: kapali cevrim (ayar noktasi var) */
   int16_t    sp_x10;        /* ayar noktasi (0.1 C)                */
   uint8_t    ctrl;          /* Exp_CtrlType (kapali cevrimde)      */

@@ -338,17 +338,19 @@ int main(void)
       if (hds_wall.status     == DS18B20_OK) Fmt_Fixed(tWall, sizeof(tWall), hds_wall.temperature_x100,     100);
       if (hds_ambient.status  == DS18B20_OK) Fmt_Fixed(tAmb,  sizeof(tAmb),  hds_ambient.temperature_x100,  100);
       {
-        char line[160], sp[12];
+        char line[160], sp[12], ureq[8];
         const Exp_Status *es = Exp_GetStatus();
         uint8_t exp_on = (es->state == EXP_RUNNING || es->state == EXP_PAUSED) ? 1U : 0U;
         sp[0] = '\0';
+        ureq[0] = '\0';
         if (exp_on && es->closed && es->state == EXP_RUNNING) Fmt_Fixed(sp, sizeof(sp), es->sp_x10, 10);
-        snprintf(line, sizeof(line), "%02u/%02u/20%02u,%02u:%02u:%02u,%lu,%s,%s,%s,%s,%s,%d,%u,%u,%u,%s,%u,%u,",
+        if (exp_on) snprintf(ureq, sizeof(ureq), "%d", (int)es->u_req);   /* deneyin istedigi komut */
+        snprintf(line, sizeof(line), "%02u/%02u/20%02u,%02u:%02u:%02u,%lu,%s,%s,%s,%s,%s,%d,%u,%u,%u,%s,%u,%u,,%s",
                  rtc.date, rtc.month, rtc.year, rtc.hours, rtc.minutes, rtc.seconds,
                  (unsigned long)(HAL_GetTick() / 1000U), tAir, rhAir, tHs, tWall, tAmb,
                  Peltier_GetCommand(), (unsigned)Peltier_IsLinkOk(),
                  exp_on ? (unsigned)es->proc : 0U, exp_on ? (unsigned)es->phase : 0U, sp,
-                 (unsigned)Exp_TakeEvent(), exp_on ? (unsigned)es->safety : 0U);
+                 (unsigned)Exp_TakeEvent(), exp_on ? (unsigned)es->safety : 0U, ureq);
         printf("%s\r\n", line);
         if (LogCtrl_IsActive())
         {
@@ -1281,6 +1283,9 @@ static void Aio_Fill(Aio_Data *a)
   Exp_FormatDuration(k, sizeof(k), (e->state == EXP_DONE) ? 0U : e->total_left_s);
   if (e->safety != EXP_SAFE_OK)
     snprintf(a->status, sizeof(a->status), "%s | GUVENLIK: %s", Exp_ProcName(e->proc), Exp_SafetyName(e->safety));
+  else if (e->limit != 0U && e->state == EXP_RUNNING)
+    snprintf(a->status, sizeof(a->status), "%s | %s SINIRLI | kalan %s", Exp_ProcName(e->proc),
+             (e->limit == 1U) ? "ISITMA" : "SOGUTMA", k);
   else if (e->full)
     snprintf(a->status, sizeof(a->status), "%s [%u/%u] | %s | kalan %s", Exp_ProcName(e->proc),
              e->stage + 1U, e->stages, Exp_StateName(e->state), k);
@@ -1379,6 +1384,7 @@ static void UI_UpdateExp(uint8_t force)
   else         snprintf(l1, sizeof(l1), "DENEY: %s", Exp_ProcName(e->proc));
 
   if (e->safety != EXP_SAFE_OK)       { badge = "GUVENLIK";     tone = UI_TONE_ERR;  }
+  else if (e->state == EXP_RUNNING && e->limit) { badge = "SINIRLI"; tone = UI_TONE_WARN; }
   else if (e->state == EXP_RUNNING)   { badge = "CALISIYOR";    tone = UI_TONE_OK;   }
   else if (e->state == EXP_PAUSED)    { badge = "DURAKLATILDI"; tone = UI_TONE_WARN; }
   else                                { badge = "TAMAMLANDI";   tone = UI_TONE_INFO; }

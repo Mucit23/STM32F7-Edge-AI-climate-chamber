@@ -416,7 +416,7 @@ function render() {
       const s = document.createElement("span");
       s.textContent = (i ? " | " : "") + p;
       if (/CALISIYOR/.test(p)) s.className = "st-ok";
-      else if (/DURAKLATILDI/.test(p)) s.className = "st-warn";
+      else if (/DURAKLATILDI|SINIRLI/.test(p)) s.className = "st-warn";
       else if (/TAMAMLANDI/.test(p)) s.className = "st-info";
       else if (/GUVENLIK/.test(p)) s.className = "st-err";
       box.appendChild(s);

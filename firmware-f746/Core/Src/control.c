@@ -63,6 +63,14 @@ int16_t PID_Step(PID_Ctrl *c, float sp, float pv, float dt_s)
   return (int16_t)((u >= 0.0f) ? (u + 0.5f) : (u - 0.5f));
 }
 
+void PID_SetLimits(PID_Ctrl *c, float umin, float umax)
+{
+  c->umin = umin;
+  c->umax = umax;
+  if (c->integ > umax) c->integ = umax;
+  if (c->integ < umin) c->integ = umin;
+}
+
 void OnOff_Init(OnOff_Ctrl *c, float hyst_c, int16_t u_heat, int16_t u_cool)
 {
   c->hyst_c = hyst_c;
@@ -82,4 +90,54 @@ int16_t OnOff_Step(OnOff_Ctrl *c, float sp, float pv)
   else if (pv > sp + c->hyst_c) c->state = c->u_cool;
   else if (c->state == 0)       c->state = (pv < sp) ? c->u_heat : c->u_cool;  /* ilk cagri */
   return c->state;
+}
+
+/* ---------------- Yuzey sicakligi sinirlayicisi ---------------- */
+void Lim_Init(Lim_Ctrl *c, float kp, float ti_s, float band_c)
+{
+  c->kp     = kp;
+  c->ti_s   = ti_s;
+  c->band_c = band_c;
+  Lim_Reset(c);
+}
+
+void Lim_Reset(Lim_Ctrl *c)
+{
+  c->allow       = 1000.0f;
+  c->prev_margin = 0.0f;
+  c->active      = 0U;
+}
+
+int16_t Lim_Step(Lim_Ctrl *c, float margin, int16_t applied_mag, int16_t req_mag, float dt_s)
+{
+  if (applied_mag < 0) applied_mag = 0;
+  if (req_mag < 0)     req_mag = 0;
+
+  if (!c->active)
+  {
+    if (margin < c->band_c)
+    {
+      c->active      = 1U;                       /* carpmasiz giris */
+      c->allow       = (float)applied_mag;
+      c->prev_margin = margin;
+    }
+    else
+    {
+      c->allow = 1000.0f;
+      return 1000;
+    }
+  }
+
+  c->allow += c->kp * (margin - c->prev_margin);
+  if (c->ti_s > 0.0f) c->allow += (c->kp / c->ti_s) * margin * dt_s;
+  c->prev_margin = margin;
+  if (c->allow > 1000.0f) c->allow = 1000.0f;
+  if (c->allow < 0.0f)    c->allow = 0.0f;
+
+  if (margin > c->band_c + 2.0f && c->allow >= (float)req_mag)
+  {
+    Lim_Reset(c);                                /* uzaklasti, kisitlamiyor */
+    return 1000;
+  }
+  return (int16_t)(c->allow + 0.5f);
 }

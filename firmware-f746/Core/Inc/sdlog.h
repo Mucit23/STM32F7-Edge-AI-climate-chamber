@@ -37,7 +37,7 @@
 #define SDLOG_FREE_EVERY     600U     /* kac satirda bir bos alan guncellensin       */
 
 /* Dosyanin basina yazilan sutun basligi (main.c'deki satir bicimiyle ayni) */
-#define SDLOG_COLUMNS  "date,time,uptime_s,T_air_dht,RH_dht,T_heatsink,T_wall,T_ambient,u_cmd,peltier_ok,proc,phase,setpoint,event,safety,v_bus"
+#define SDLOG_COLUMNS  "date,time,uptime_s,T_air_dht,RH_dht,T_heatsink,T_wall,T_ambient,u_cmd,peltier_ok,proc,phase,setpoint,event,safety,v_bus,u_req"
 
 typedef enum
 {
