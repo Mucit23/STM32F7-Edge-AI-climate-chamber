@@ -30,12 +30,15 @@ typedef enum
 #define SCREEN_CONFIRM_TIMEOUT_MS  10000U   /* onay penceresi: HAYIR sayilir   */
 #define SCREEN_MENU_TIMEOUT_MS     60000U   /* deney menu/parametre/olay       */
 #define SCREEN_RUN_TIMEOUT_MS      120000U  /* deney izleme -> ana ekran       */
+#define SCREEN_BL_TIMEOUT_MS       300000U  /* 5 dk dokunulmazsa ekran isigi kapanir (0 = kapanmaz) */
 
 void      Screen_Init(I2C_HandleTypeDef *hi2c_rtc);
 /* Ana donguden her turda: rtc = son okunan saat, rtc_ok = okuma basarili mi */
 void      Screen_Task(const DS3231_TimeDate *rtc, uint8_t rtc_ok);
 Screen_Id Screen_Current(void);
 void      Screen_OpenClockSetup(const DS3231_TimeDate *rtc);   /* fiziksel buton icin */
+void      Screen_Wake(void);           /* ekran isigini ac, sayaci sifirla (or. guvenlik olayi) */
+uint8_t   Screen_BacklightOn(void);
 
 /* main.c'de tanimlanir: ana ekrani bastan cizer */
 void      App_RedrawMain(void);

@@ -16,6 +16,7 @@
 #include "logctrl.h"
 #include "sdlog.h"
 #include "exp.h"
+#include "stm32746g_discovery_lcd.h"     /* LCD_BL_CTRL (PK3): ekran isigi */
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -82,6 +83,25 @@ static Screen_Id  screen = SCREEN_MAIN;
 static const Btn_Def *active = NULL;     /* su an basili tutulan buton */
 static uint32_t   next_repeat;
 static uint32_t   last_activity;
+static uint32_t   bl_last;          /* son dokunus / uyandirma (ekran isigi) */
+static uint8_t    bl_on = 1U;
+
+static void BL_Set(uint8_t on)
+{
+  HAL_GPIO_WritePin(LCD_BL_CTRL_GPIO_PORT, LCD_BL_CTRL_PIN, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  bl_on = on;
+}
+
+void Screen_Wake(void)
+{
+  bl_last = HAL_GetTick();
+  if (!bl_on) BL_Set(1U);
+}
+
+uint8_t Screen_BacklightOn(void)
+{
+  return bl_on;
+}
 static uint8_t    wait_release;          /* ekran degisti: parmak kalkana kadar yok say */
 
 static uint16_t   fv[UI_FIELD_COUNT];    /* saat, dakika, gun, ay, yil (4 hane) */
@@ -624,6 +644,8 @@ void Screen_Init(I2C_HandleTypeDef *hi2c_rtc)
   active = NULL;
   wait_release = 0U;
   (void)Touch_Init();
+  bl_last = HAL_GetTick();
+  BL_Set(1U);
 }
 
 Screen_Id Screen_Current(void)
@@ -650,6 +672,27 @@ void Screen_Task(const DS3231_TimeDate *rtc, uint8_t rtc_ok)
     case SCREEN_EXP_EVENT: list = event_btns; n = (uint8_t)(sizeof(event_btns) / sizeof(event_btns[0])); break;
     default:                  list = main_btns;    n = (uint8_t)(sizeof(main_btns) / sizeof(main_btns[0]));       break;
   }
+
+  /* Ekran isigi (ekran koruyucu): SCREEN_BL_TIMEOUT_MS dokunulmazsa PK3 = 0.
+   * Isik kapaliyken ilk dokunus yalnizca isigi acar, butona basilmis sayilmaz.
+   * LTDC calismaya devam eder; ekran icerigi guncel kalir. */
+#if SCREEN_BL_TIMEOUT_MS > 0
+  if (t->pressed && bl_on) bl_last = now;
+  if (!bl_on)
+  {
+    if (t->down_evt)
+    {
+      BL_Set(1U);
+      bl_last      = now;
+      wait_release = 1U;            /* bu dokunus butona gitmesin */
+      active       = NULL;
+    }
+  }
+  else if ((now - bl_last) > SCREEN_BL_TIMEOUT_MS)
+  {
+    BL_Set(0U);
+  }
+#endif
 
   /* Ekran degistikten sonra parmak kalkana kadar dokunuslari yok say */
   if (wait_release)

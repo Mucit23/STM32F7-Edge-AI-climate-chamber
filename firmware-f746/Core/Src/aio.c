@@ -16,6 +16,9 @@
   *
   *  Adafruit IO kurallari (ucretsiz hesap):
   *    - dakikada 30 veri noktasi; grup gonderimi feed basina 1 sayilir
+ *      (20 s'de 8 deger + dakikada bir status ve sd = dakikada ~26 nokta)
+ *    - en fazla 10 feed: t-air, rh, t-peltier, t-wall, t-ambient, u-cmd,
+ *      setpoint, safety, status, sd
   *    - dakikada 20'den fazla baglanti denemesi yasaklanir (bekleme bunu onler)
   *    - uyarilar <kullanici>/throttle, hatalar <kullanici>/errors konusuna gelir;
   *      ikisine de abone olunur ve gelen mesaj log'a yazilir
@@ -244,6 +247,7 @@ static void Publish(const Aio_Data *d)
     status_cnt = 0U;
     strncpy(last_status, d->status, sizeof(last_status) - 1U);
     pos = AddStr(p, pos, &first, "status", d->status);
+    if (d->sd[0]) pos = AddStr(p, pos, &first, "sd", d->sd);   /* SD bilgisi ayni aralikla */
   }
   if (pos + 3U > sizeof(p)) return;
   p[pos++] = '}'; p[pos++] = '}'; p[pos] = '\0';

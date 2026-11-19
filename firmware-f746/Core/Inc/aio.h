@@ -10,7 +10,7 @@
   *
   *          Gonderilen grup: <kullanici>/groups/<AIO_GROUP>/json
   *          Feed'ler: t-air, rh, t-peltier, t-wall, t-ambient, u-cmd,
-  *                    setpoint, safety, status
+  *                    setpoint, safety, status, sd
   ******************************************************************************
   */
 #ifndef __AIO_H
@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #define AIO_STATUS_LEN   64U
+#define AIO_SD_LEN       80U
 
 typedef struct
 {
@@ -31,6 +32,7 @@ typedef struct
   uint8_t  sp_ok;       int16_t sp_x10;       /* set degeri (kapali cevrim)  */
   uint8_t  safety;                            /* 0 = normal                  */
   char     status[AIO_STATUS_LEN];            /* deney durumu metni          */
+  char     sd[AIO_SD_LEN];                    /* SD: durum|dosya|kayit|hata|bosMB|boyutKB */
 } Aio_Data;
 
 void Aio_Init(void);

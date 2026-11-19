@@ -118,6 +118,19 @@
   .exp-text .st-err { color: var(--err); } .exp-text .st-info { color: var(--cool); }
   .badge { font: 500 13px var(--sans); padding: 4px 10px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
   .badge.ok { color: var(--ok); } .badge.err { color: var(--err); background: #2A1616; }
+  .badge.warn { color: var(--warn); } .badge.muted { color: var(--muted); }
+
+  /* ---- SD kart ---- */
+  .sd { margin-top: 12px; }
+  .sd-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .sd-head h2 { margin: 0; }
+  .sd-file { font: 500 16px var(--mono); overflow-wrap: anywhere; margin-bottom: 12px; }
+  .sd-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+  .sd-grid div { min-width: 0; }
+  .sd-grid dt { color: var(--muted); font-size: 13px; }
+  .sd-grid dd { margin: 2px 0 0; font: 500 18px var(--mono); }
+  .sd-grid dd.err { color: var(--err); }
+  .sd-note { margin-top: 10px; color: var(--muted); font-size: 13px; }
 
   /* ---- grafikler ---- */
   .charts-head { margin: 28px 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -143,6 +156,7 @@
     .sensors { grid-template-columns: 1fr; }
     .sensors .panel { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
     .sensor .v { font-size: 28px; }
+    .sd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .clock { font-size: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -221,6 +235,22 @@
       <div class="exp-text" id="expText">--</div>
     </div>
     <span class="badge ok" id="safety">Güvenlik normal</span>
+  </section>
+
+  <section class="panel sd" aria-labelledby="sdTitle">
+    <div class="sd-head">
+      <h2 id="sdTitle">SD kart kaydı</h2>
+      <span class="badge muted" id="sdState">Bilgi yok</span>
+    </div>
+    <div class="sd-file" id="sdFile">--</div>
+    <dl class="sd-grid">
+      <div><dt>Kayıt sayısı</dt><dd id="sdRec">--</dd></div>
+      <div><dt>Kayıt süresi</dt><dd id="sdDur">--</dd></div>
+      <div><dt>Dosya boyutu</dt><dd id="sdSize">--</dd></div>
+      <div><dt>Boş alan</dt><dd id="sdFree">--</dd></div>
+      <div><dt>Yazma hatası</dt><dd id="sdErr">--</dd></div>
+    </dl>
+    <div class="sd-note" id="sdNote">SD bilgisi dakikada bir gelir.</div>
   </section>
 
   <div class="charts-head">
@@ -397,7 +427,35 @@ function render() {
   b.textContent = SAFETY[sf] || ("Güvenlik kodu " + sf);
   b.className = "badge " + (sf ? "err" : "ok");
 
+  renderSd();
   renderConn();
+}
+
+/* "sd" feed'i: durum|dosya|kayit|hata|bos MB|dosya KB */
+function renderSd() {
+  const f = last["sd"];
+  const b = $("sdState");
+  if (!f || !f.value) return;
+  const [state, file, rec, err, freeMb, sizeKb] = String(f.value).split("|");
+  const n = (x) => { const v = parseInt(x, 10); return Number.isFinite(v) ? v : null; };
+  const recN = n(rec), errN = n(err), freeN = n(freeMb), sizeN = n(sizeKb);
+  const TXT = { "KAYITTA": ["Kayıt yapılıyor", "ok"], "HAZIR": ["Kart hazır, kayıt kapalı", "muted"],
+                "KART YOK": ["Kart takılı değil", "err"], "HATA": ["Kart hatası", "err"], "SAAT YOK": ["Saat okunamıyor", "warn"] };
+  const [label, cls] = TXT[state] || [state || "?", "muted"];
+  b.textContent = label;
+  b.className = "badge " + cls;
+  $("sdFile").textContent = file && file !== "--" ? file : "Açık dosya yok";
+  $("sdRec").textContent = recN === null ? "--" : recN.toLocaleString("tr-TR");
+  if (recN === null) $("sdDur").textContent = "--";
+  else {
+    const h = Math.floor(recN / 3600), m = Math.floor((recN % 3600) / 60);
+    $("sdDur").textContent = h >= 24 ? Math.floor(h / 24) + " g " + (h % 24) + " sa" : h + " sa " + pad(m) + " dk";
+  }
+  $("sdSize").textContent = sizeN === null ? "--" : (sizeN >= 1024 ? (sizeN / 1024).toFixed(1) + " MB" : sizeN + " KB");
+  $("sdFree").textContent = freeN === null ? "--" : (freeN >= 1024 ? (freeN / 1024).toFixed(1) + " GB" : freeN + " MB");
+  $("sdErr").textContent = errN === null ? "--" : String(errN);
+  $("sdErr").className = errN ? "err" : "";
+  $("sdNote").textContent = "SD bilgisi " + ago((Date.now() - f.t) / 1000) + " güncellendi. Dosyada en fazla 86 400 kayıt (1 gün) olur, sonra _2, _3 … ile devam eder.";
 }
 
 function renderConn() {

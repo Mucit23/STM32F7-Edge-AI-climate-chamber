@@ -230,6 +230,7 @@ int main(void)
   uint32_t press_started_at = 0;
   uint32_t last_print_tick = 0;
   uint32_t last_sample_tick = HAL_GetTick();
+  uint8_t  sample_last_sec  = 0xFFU;      /* son orneklenen RTC saniyesi */
 
   while (1)
   {
@@ -274,11 +275,17 @@ int main(void)
       Ds18B20_Task(ds_list[k]);
     }
 
-    /* ---------------- 1 Hz ornekleme ---------------- */
-    if (HAL_GetTick() - last_sample_tick >= SAMPLE_PERIOD_MS)
+    /* ---------------- 1 Hz ornekleme ----------------
+     * RTC saniyesi degisince bir ornek alinir: her gercek saniyeye tam bir satir.
+     * (P1 on testinde HAL_GetTick ile 1000 ms beklemek, dongu gecikmesi ve DHT22
+     * okumasindaki kesme kapatma yuzunden 22 saatte 563 saniyeyi atlatti.)
+     * RTC okunamazsa HAL_GetTick ile 1000 ms'ye geri donulur. */
+    if (rtc_ok ? (rtc.seconds != sample_last_sec)
+               : (HAL_GetTick() - last_sample_tick >= SAMPLE_PERIOD_MS))
     {
       char tAir[12], rhAir[12], tHs[12], tWall[12], tAmb[12];
       last_sample_tick = HAL_GetTick();
+      sample_last_sec  = rtc_ok ? rtc.seconds : 0xFFU;
 
       /* Sensorlerin en son gecerli degerleri alinir (okuma Task'larda yapildi) */
       sample_count++;
@@ -291,6 +298,16 @@ int main(void)
         ein.peltier_valid = (hds_heatsink.status == DS18B20_OK) ? 1U : 0U;   /* D3: Peltier yuzeyi */
         ein.peltier_x100  = hds_heatsink.temperature_x100;
         Exp_Task1Hz(&ein, &rtc, rtc_ok);
+      }
+
+      /* Ekran isigi kapaliysa deney durumu ya da guvenlik degisince ac */
+      {
+        static Exp_State  w_state  = EXP_IDLE;
+        static Exp_Safety w_safety = EXP_SAFE_OK;
+        const Exp_Status *es = Exp_GetStatus();
+        if (es->state != w_state || es->safety != w_safety) Screen_Wake();
+        w_state  = es->state;
+        w_safety = es->safety;
       }
 
       Net_Task1Hz();            /* kablo / IP / sunucu durumu, degisince log */
@@ -351,6 +368,7 @@ int main(void)
       else if (!long_press_done && (HAL_GetTick() - press_started_at) >= 2000)
       {
         /* Yedek yol: user butonuna 2 s basinca dokunmatik saat ayar sayfasi acilir */
+        Screen_Wake();
         if (Screen_Current() == SCREEN_MAIN)
         {
           Screen_OpenClockSetup(&rtc);
@@ -1241,6 +1259,16 @@ static void Aio_Fill(Aio_Data *a)
   a->amb_x100 = hds_ambient.temperature_x100;
   a->u_cmd    = Peltier_GetCommand();
   a->safety   = (uint8_t)e->safety;
+
+  /* SD kart: durum|dosya|kayit|hata|bos MB|dosya KB (web sayfasi ayristirir) */
+  {
+    static const char *const sdn[] = { "KART YOK", "HAZIR", "KAYITTA", "HATA", "SAAT YOK" };
+    const SdLog_Info *s = SdLog_GetInfo();
+    snprintf(a->sd, sizeof(a->sd), "%s|%s|%lu|%lu|%lu|%lu",
+             ((unsigned)s->state < 5U) ? sdn[s->state] : "?", s->file,
+             (unsigned long)s->records, (unsigned long)s->errors,
+             (unsigned long)s->free_mb, (unsigned long)s->size_kb);
+  }
 
   if (e->state == EXP_IDLE)
   {
