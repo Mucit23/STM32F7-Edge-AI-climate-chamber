@@ -449,7 +449,7 @@ static void OpenRun(const char *note, const DS3231_TimeDate *rtc)
 static void OpenEvent(void)
 {
   UI_DrawPage("OLAY ISARETLE", "log'a yazilir");
-  UI_SetButtonLabel(UI_BTN_EV0, "KAPAK ACILDI", "kapi / kapak", UI_STYLE_WARN);
+  UI_SetButtonLabel(UI_BTN_EV0, "KAPAK", "otomatik (D7)", UI_STYLE_DISABLED);
   UI_SetButtonLabel(UI_BTN_EV1, "ISIL YUK", "su sisesi vb.", UI_STYLE_WARN);
   UI_SetButtonLabel(UI_BTN_EV2, "DIS ORTAM", "degisti", UI_STYLE_WARN);
   UI_SetButtonLabel(UI_BTN_EV3, "DIGER", NULL, UI_STYLE_NORMAL);
@@ -615,7 +615,8 @@ static void Fire(UI_ButtonId id, const DS3231_TimeDate *rtc, uint8_t rtc_ok)
       break;
 
     case SCREEN_EXP_EVENT:
-      if (id >= UI_BTN_EV0 && id <= UI_BTN_EV3)
+      if (id == UI_BTN_EV0) break;                 /* kapak olayi anahtardan otomatik */
+      if (id >= UI_BTN_EV1 && id <= UI_BTN_EV3)
       {
         static const Exp_Event ev[4] = { EXP_EVT_DOOR, EXP_EVT_LOAD, EXP_EVT_AMBIENT, EXP_EVT_OTHER };
         if (rtc_ok) Exp_MarkEvent(ev[id - UI_BTN_EV0], rtc);

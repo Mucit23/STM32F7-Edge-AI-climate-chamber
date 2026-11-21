@@ -67,6 +67,11 @@ def main(paths):
     ax[1].set_ylabel("Peltier (%)")
     ax[1].set_ylim(-105, 105)
     ax[2].plot(df.ts, df.RH_dht, color="#2E86C1", lw=1)
+    if "door" in df.columns:                      # kapak acik araliklari (D7 anahtari)
+        op = df.door.fillna(0).astype(int) == 1
+        for a in ax:
+            a.fill_between(df.ts, 0, 1, where=op, transform=a.get_xaxis_transform(),
+                           color="orange", alpha=0.15, linewidth=0)
     ev = df[df.event != 0]
     for t in ev.ts:
         for a in ax:

@@ -121,6 +121,47 @@ static void Fmt_Fixed(char *buf, size_t n, int32_t v, int32_t scale);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* ---------------- Kapak anahtari (D7 = PI3) ----------------
+ * Anahtar kapak kapaliyken pini GND'ye ceker: D7 = 0 kapali, D7 = 1 acik.
+ * Ic pull-up acik; anahtar takili degilse kapak "acik" gorunur.
+ * CubeMX D7'yi cikis olarak tanimliyor; MX_GPIO_Init'ten sonra burada
+ * girise cevrilir (CubeMX'te de PI3 = GPIO_Input, Pull-up yapilabilir). */
+#define DOOR_GPIO_Port      GPIOI
+#define DOOR_Pin            GPIO_PIN_3
+#define DOOR_DEBOUNCE_MS    50U
+
+static uint8_t  door_open;          /* kararli durum: 1 = acik */
+static uint8_t  door_raw;
+static uint32_t door_t;
+
+static void Door_Init(void)
+{
+  GPIO_InitTypeDef g = {0};
+  g.Pin   = DOOR_Pin;
+  g.Mode  = GPIO_MODE_INPUT;
+  g.Pull  = GPIO_PULLUP;
+  g.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DOOR_GPIO_Port, &g);
+  HAL_Delay(2);                     /* pull-up otursun */
+  door_raw  = (HAL_GPIO_ReadPin(DOOR_GPIO_Port, DOOR_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  door_open = door_raw;
+  door_t    = HAL_GetTick();
+}
+
+/* Her dongude cagrilir; kararli durum degisince 1 doner (50 ms sabit kalmali). */
+static uint8_t Door_Task(void)
+{
+  uint8_t  raw = (HAL_GPIO_ReadPin(DOOR_GPIO_Port, DOOR_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  uint32_t now = HAL_GetTick();
+  if (raw != door_raw) { door_raw = raw; door_t = now; return 0U; }
+  if (raw != door_open && (now - door_t) >= DOOR_DEBOUNCE_MS)
+  {
+    door_open = raw;
+    return 1U;
+  }
+  return 0U;
+}
+
 
 /* Sensor nesneleri (pinler: USER CODE PD bolumu) */
 static DHT22_HandleTypeDef   hdht22;
@@ -177,6 +218,7 @@ int main(void)
    * yeterli. HAL_SD_Init f_mount sirasinda cagrildigi icin burada ayarlamak yeterli. */
   hsd1.Init.ClockDiv = 2U;
   Debug_UART_Init();          /* printf -> USART1 (ST-LINK sanal COM) */
+  Door_Init();                /* D7 kapak anahtari: giris + pull-up  */
   Peltier_Init(&huart6);      /* USART6 -> Peltier surucu karti       */
 
   if (BSP_LCD_Init() != LCD_OK)
@@ -248,6 +290,15 @@ int main(void)
 
     /* ---------------- Saat oku ---------------- */
     rtc_ok = DS3231_GetTimeDate(&hi2c1, &rtc);
+
+    /* ---------------- Kapak anahtari: acilis/kapanis olay olarak kaydedilir ---------------- */
+    if (Door_Task())
+    {
+      if (rtc_ok) Exp_MarkEvent(door_open ? EXP_EVT_DOOR : EXP_EVT_DOOR_CLOSE, &rtc);
+      printf("KAPAK %s\r\n", door_open ? "ACILDI" : "KAPANDI");
+      Screen_Wake();
+      if (Screen_Current() == SCREEN_MAIN) UI_DrawDoor(door_open);
+    }
 
     /* ---------------- Dokunmatik + ekran durum makinesi (bloklamaz) ---------------- */
     Screen_Task(&rtc, rtc_ok);
@@ -345,12 +396,12 @@ int main(void)
         ureq[0] = '\0';
         if (exp_on && es->closed && es->state == EXP_RUNNING) Fmt_Fixed(sp, sizeof(sp), es->sp_x10, 10);
         if (exp_on) snprintf(ureq, sizeof(ureq), "%d", (int)es->u_req);   /* deneyin istedigi komut */
-        snprintf(line, sizeof(line), "%02u/%02u/20%02u,%02u:%02u:%02u,%lu,%s,%s,%s,%s,%s,%d,%u,%u,%u,%s,%u,%u,,%s",
+        snprintf(line, sizeof(line), "%02u/%02u/20%02u,%02u:%02u:%02u,%lu,%s,%s,%s,%s,%s,%d,%u,%u,%u,%s,%u,%u,,%s,%u",
                  rtc.date, rtc.month, rtc.year, rtc.hours, rtc.minutes, rtc.seconds,
                  (unsigned long)(HAL_GetTick() / 1000U), tAir, rhAir, tHs, tWall, tAmb,
                  Peltier_GetCommand(), (unsigned)Peltier_IsLinkOk(),
                  exp_on ? (unsigned)es->proc : 0U, exp_on ? (unsigned)es->phase : 0U, sp,
-                 (unsigned)Exp_TakeEvent(), exp_on ? (unsigned)es->safety : 0U, ureq);
+                 (unsigned)Exp_TakeEvent(), exp_on ? (unsigned)es->safety : 0U, ureq, (unsigned)door_open);
         printf("%s\r\n", line);
         if (LogCtrl_IsActive())
         {
@@ -1086,6 +1137,7 @@ static void Draw_StartupScreen(void)
   UI_UpdateSd();
   UI_UpdateExp(1);
   UI_UpdateNet(1);
+  UI_DrawDoor(door_open);
 }
 
 /* Sabit noktali sayiyi metne cevirir (float printf gerektirmez).
@@ -1274,7 +1326,7 @@ static void Aio_Fill(Aio_Data *a)
 
   if (e->state == EXP_IDLE)
   {
-    snprintf(a->status, sizeof(a->status), "BOSTA");
+    snprintf(a->status, sizeof(a->status), door_open ? "BOSTA | KAPAK ACIK" : "BOSTA");
     return;
   }
   a->sp_ok  = (e->closed && e->state != EXP_DONE) ? 1U : 0U;
@@ -1291,6 +1343,11 @@ static void Aio_Fill(Aio_Data *a)
              e->stage + 1U, e->stages, Exp_StateName(e->state), k);
   else
     snprintf(a->status, sizeof(a->status), "%s | %s | kalan %s", Exp_ProcName(e->proc), Exp_StateName(e->state), k);
+  if (door_open)
+  {
+    size_t n = strlen(a->status);
+    snprintf(a->status + n, sizeof(a->status) - n, " | KAPAK ACIK");
+  }
 }
 
 /* Ana ekran basligi: ag ve sunucu durumu. Metin degismedikce yeniden cizilmez. */

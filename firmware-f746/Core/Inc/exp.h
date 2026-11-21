@@ -95,6 +95,7 @@ typedef enum
   EXP_EVT_DOOR = 1,       /* kapak acildi               */
   EXP_EVT_LOAD = 2,       /* isil yuk eklendi/cikarildi */
   EXP_EVT_AMBIENT = 3,    /* dis ortam degisti          */
+  EXP_EVT_DOOR_CLOSE = 4, /* kapak kapandi (D7 anahtari) */
   EXP_EVT_OTHER = 9
 } Exp_Event;
 

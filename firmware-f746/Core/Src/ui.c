@@ -240,6 +240,15 @@ void UI_DrawSensor(uint8_t card, uint8_t has_value, int32_t value, uint8_t decim
        (level != UI_LEVEL_OK) ? col : (sub_is_humidity ? C_HUM : C_MUTED), C_PANEL, line);
 }
 
+/* Peltier panelinde "Kapak :" satiri (D7 anahtari) */
+void UI_DrawDoor(uint8_t open)
+{
+  char p[16];
+  Text(PEL_X + 8U, PEL_Y + 106U, &Font12, C_UNIT, C_PANEL, "Kapak :");
+  Pad(p, sizeof(p), open ? "ACIK" : "KAPALI", 11);
+  Text(PEL_X + 8U + 8U * 7U, PEL_Y + 106U, &Font12, open ? C_WARN : C_OK, C_PANEL, p);
+}
+
 void UI_DrawPeltier(int16_t cmd, uint8_t link_ok, const char *link_code)
 {
   char s[24], p[24];
@@ -279,10 +288,7 @@ void UI_DrawPeltier(int16_t cmd, uint8_t link_ok, const char *link_code)
   }
   Fill(BAR_MID - 1U, BAR_Y - 3U, 2U, BAR_H + 6U, C_TEXT);
 
-  /* Komut satiri */
-  snprintf(s, sizeof(s), "Komut : %d/1000", cmd);
-  Pad(p, sizeof(p), s, 19);
-  Text(PEL_X + 8U, PEL_Y + 106U, &Font12, C_UNIT, C_PANEL, p);
+  /* (106. satir: kapak durumu, UI_DrawDoor) */
 
   /* Surucu durumu */
   if (link_ok)

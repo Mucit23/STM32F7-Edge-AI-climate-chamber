@@ -20,6 +20,7 @@ kontrolcü testleri için kullanılır.
 | DS18B20 (D4) | Karşı duvar yüzeyi |
 | DS18B20 (D2) | Dış ortam |
 | DS3231 + AT24C32 | Gerçek zaman saati, kalıcı ayarlar (I2C1) |
+| Kapak anahtarı (D7, PI3) | 0 = kapalı, 1 = açık; iç pull-up, 50 ms debounce |
 | 12 V 20 A SMPS (10–14,7 V ayarlı) | Peltier beslemesi |
 
 ## Klasörler

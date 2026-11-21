@@ -130,6 +130,7 @@ void UI_DrawParamRow(uint8_t row, const char *label, const char *value, uint8_t 
 void UI_DrawFooterNote(const char *l1, const char *l2, UI_Tone tone);
 
 void UI_DrawFrame(void);
+void UI_DrawDoor(uint8_t open);          /* Peltier panelinde kapak satiri */
 /* Ana ekran basligi sol ust: ag (IP) ve sunucu durumu, iki satir */
 void UI_DrawNetStatus(const char *line1, UI_Tone t1, const char *line2, UI_Tone t2);
 void UI_DrawClock(const DS3231_TimeDate *rtc, uint8_t ok);

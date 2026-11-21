@@ -413,11 +413,11 @@ void Exp_Acknowledge(void)
 
 void Exp_MarkEvent(Exp_Event ev, const DS3231_TimeDate *rtc)
 {
-  static const char *const nm[] = { "", "KAPAK ACILDI", "ISIL YUK", "DIS ORTAM DEGISTI" };
+  static const char *const nm[] = { "", "KAPAK ACILDI", "ISIL YUK", "DIS ORTAM DEGISTI", "KAPAK KAPANDI" };
   char s[64];
   st.pending_event = (uint8_t)ev;
   snprintf(s, sizeof(s), "# OLAY %u: %s, %02u:%02u:%02u", (unsigned)ev,
-           (ev <= EXP_EVT_AMBIENT) ? nm[ev] : "DIGER", rtc->hours, rtc->minutes, rtc->seconds);
+           (ev <= EXP_EVT_DOOR_CLOSE) ? nm[ev] : "DIGER", rtc->hours, rtc->minutes, rtc->seconds);
   Comment(s);
 }
 

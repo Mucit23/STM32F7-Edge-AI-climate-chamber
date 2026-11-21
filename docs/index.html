@@ -410,13 +410,14 @@ function render() {
   box.textContent = "";
   if (!st) box.textContent = "--";
   else if (st === "BOSTA") box.textContent = "Çalışan deney yok";
+  else if (st === "BOSTA | KAPAK ACIK") { box.textContent = "Çalışan deney yok | "; const k = document.createElement("span"); k.className = "st-warn"; k.textContent = "KAPAK ACIK"; box.appendChild(k); }
   else {
     const parts = st.split(" | ");
     parts.forEach((p, i) => {
       const s = document.createElement("span");
       s.textContent = (i ? " | " : "") + p;
       if (/CALISIYOR/.test(p)) s.className = "st-ok";
-      else if (/DURAKLATILDI|SINIRLI/.test(p)) s.className = "st-warn";
+      else if (/DURAKLATILDI|SINIRLI|KAPAK ACIK/.test(p)) s.className = "st-warn";
       else if (/TAMAMLANDI/.test(p)) s.className = "st-info";
       else if (/GUVENLIK/.test(p)) s.className = "st-err";
       box.appendChild(s);
