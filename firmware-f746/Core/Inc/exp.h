@@ -26,7 +26,7 @@
 
 /* ---------------- Guvenlik (son koruma, cok yuksek sinirlar) ---------------- */
 #define EXP_SAFETY_ENABLE      1        /* 0: tamamen kapali                    */
-#define EXP_LIMIT_AIR_C        65       /* kabin havasi ust siniri (C)          */
+#define EXP_LIMIT_AIR_C        70       /* kabin havasi ust siniri (C); fanli P1'de +75/+100 % ile ~62 C */
 #define EXP_LIMIT_PELTIER_C    80       /* Peltier yuzeyi ust siniri (C)        */
 #define EXP_SAFETY_HYST_C      5        /* sinirin bu kadar altina inince...    */
 #define EXP_SAFETY_HOLD_S      600U     /* ...ve bu kadar sure sonra devam      */
