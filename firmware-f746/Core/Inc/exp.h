@@ -39,6 +39,10 @@
  * 80 C tam kapatma (yukarida) son guvenlik olarak kalir.
  * Ayarlar P1 on testinden: yuzey ~0.9 K/% (isitma), ~0.25 K/% (sogutma),
  * zaman sabiti ~5 dk. Benzetimde (eski donanim) en fazla ~2 K asim. */
+/* APRBS (P3 ve P6) sogutma alt siniri. Peltier soguturken zayif (P1 #2: -100 %
+ * ile -12.6 K, +50 % ile +29.8 K); sogutmada tum aralik kullanilir. */
+#define EXP_APRBS_COOL_PCT     100U
+
 #define EXP_LIM_ENABLE         1
 #define EXP_LIM_HEAT_C         70.0f    /* isitmada yuzey ust siniri            */
 #define EXP_LIM_COOL_C         1.0f     /* sogutmada yuzey alt siniri (buzlanma) */
@@ -110,7 +114,7 @@ typedef struct
   uint8_t  p3_days;
   uint16_t p3_hold_min;     /* APRBS en kisa tutma (dk)            */
   uint16_t p3_hold_max;     /* APRBS en uzun tutma (dk)            */
-  uint8_t  p3_amp_pct;      /* APRBS genlik (%)                    */
+  uint8_t  p3_heat_pct;     /* APRBS isitma ust siniri (%); sogutma her zaman -100 % */
   uint8_t  p4_days;
   uint8_t  p4_ctrl;         /* Exp_CtrlType                        */
   uint8_t  p5_days;

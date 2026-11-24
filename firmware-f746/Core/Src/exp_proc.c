@@ -5,9 +5,11 @@
   *
   *  P1: 11 seviye x tekrar, her biri p1_hold_min
   *      seviye: 0, +25, +50, +75, +100, 0, -25, -50, -75, -100, 0 (%)
-  *  P2: her tekrarda 3 genlik (25/50/100 %) x 2 yon:
-  *      [0: denge] [+A: basamak] [0: denge] [-A: basamak]
-  *  P3: APRBS - her segmentte seviye ~ U[-A, +A] (10'luk adim),
+  *  P2: her tekrarda 3 cift asimetrik genlik:
+  *      [0][+15 %] [0][-50 %] [0][+30 %] [0][-75 %] [0][+50 %] [0][-100 %]
+  *      (P1 #2: isitma ~0.6 K/%, sogutma -25 %'de olu bolge; benzer buyuklukte
+  *      sicaklik degisimi icin isitma kucuk, sogutma buyuk genlikli)
+  *  P3: APRBS - her segmentte seviye ~ U[-100, +H] (10'luk adim, H = p3_heat_pct),
   *      sure ~ U[min, max] dk. Xorshift32 PRNG, tohum deney basinda.
   *  P4: gun gun donen profiller (0: basamak, 1: rampa, 2: gun/gece);
   *      KARMA kontrolde 3 gunde bir PID <-> ON/OFF degisir.
@@ -18,7 +20,8 @@
 #include "exp_proc.h"
 
 static const int16_t p1_levels[11] = { 0, 250, 500, 750, 1000, 0, -250, -500, -750, -1000, 0 };
-static const int16_t p2_amps[3]    = { 250, 500, 1000 };
+static const int16_t p2_heat[3]    = { 150, 300, 500 };
+static const int16_t p2_cool[3]    = { 500, 750, 1000 };
 
 /* P4 basamak profili: 8 x 3 saat (0.1 C) */
 static const int16_t p4_steps[8]   = { 250, 350, 200, 300, 150, 280, 400, 220 };
@@ -51,18 +54,18 @@ int16_t Proc_Dither(uint32_t seed, uint32_t t)
 }
 
 /* APRBS: t anindaki segmenti bastan uretir (10 gunde ~700 segment, us mertebesi) */
-static void Aprbs(uint32_t seed, uint16_t amp, uint16_t hmin, uint16_t hmax, uint32_t t,
+static void Aprbs(uint32_t seed, uint16_t cool, uint16_t heat, uint16_t hmin, uint16_t hmax, uint32_t t,
                   int16_t *level, uint16_t *seg, uint32_t *next)
 {
   uint32_t s = seed;
   uint32_t start = 0;
   uint16_t idx = 0;
-  uint16_t nlev = (uint16_t)(2U * (amp / 10U) + 1U);    /* -A..+A, 10'luk adim */
+  uint16_t nlev = (uint16_t)((cool + heat) / 10U + 1U);   /* -cool..+heat, 10'luk adim */
   if (hmax < hmin) hmax = hmin;
   for (;;)
   {
     uint32_t hold = (uint32_t)(hmin + (Prng_Next(&s) % (uint32_t)(hmax - hmin + 1U))) * EXP_MIN_S;
-    int16_t  lv   = (int16_t)((int32_t)(Prng_Next(&s) % nlev) * 10 - (int32_t)amp);
+    int16_t  lv   = (int16_t)((int32_t)(Prng_Next(&s) % nlev) * 10 - (int32_t)cool);
     if (hold == 0U) hold = 1U;
     if (t < start + hold)
     {
@@ -149,8 +152,8 @@ void Proc_Eval(Exp_Proc p, const Exp_Params *pr, uint32_t seed,
       uint32_t r      = t % plen;
       uint8_t  in_step = (r >= settle) ? 1U : 0U;
       uint32_t k      = pair % 6U;                    /* 3 genlik x 2 yon */
-      int16_t  amp    = p2_amps[k / 2U];
-      o->u = in_step ? ((k & 1U) ? (int16_t)-amp : amp) : 0;
+      int16_t  amp    = (k & 1U) ? (int16_t)-p2_cool[k / 2U] : p2_heat[k / 2U];
+      o->u = in_step ? amp : 0;
       o->phase = (uint16_t)(pair * 2U + in_step);
       o->next_change_s = in_step ? (plen - r) : (settle - r);
       break;
@@ -159,7 +162,7 @@ void Proc_Eval(Exp_Proc p, const Exp_Params *pr, uint32_t seed,
     case EXP_P3_APRBS:
     {
       uint16_t seg;
-      Aprbs(seed, (uint16_t)(pr->p3_amp_pct * 10U), pr->p3_hold_min, pr->p3_hold_max, t,
+      Aprbs(seed, EXP_APRBS_COOL_PCT * 10U, (uint16_t)(pr->p3_heat_pct * 10U), pr->p3_hold_min, pr->p3_hold_max, t,
             &o->u, &seg, &o->next_change_s);
       o->phase = seg;
       break;
@@ -225,7 +228,9 @@ void Proc_Eval(Exp_Proc p, const Exp_Params *pr, uint32_t seed,
       if (t < ta)
       {
         uint16_t seg;
-        Aprbs(EXP_P6_SEED, 1000U, 3U, 40U, t, &o->u, &seg, &o->next_change_s);
+        /* egitimle ayni aralik (P3 ile ayni isitma siniri) */
+        Aprbs(EXP_P6_SEED, EXP_APRBS_COOL_PCT * 10U, (uint16_t)(pr->p3_heat_pct * 10U), 3U, 40U, t,
+              &o->u, &seg, &o->next_change_s);
         if (o->next_change_s > ta - t) o->next_change_s = ta - t;
         o->phase = seg;
       }

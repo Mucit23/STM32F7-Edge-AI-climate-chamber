@@ -25,7 +25,7 @@
 #include <string.h>
 
 #define EXP_MAGIC        0x31505845UL     /* "EXP1" */
-#define EXP_VERSION      2U               /* 2: file_t0 eklendi (1 de okunur) */
+#define EXP_VERSION      3U               /* 2: file_t0; 3: p3 genlik -> isitma ust siniri */
 #define EXP_ADDR_A       0x0100U
 #define EXP_ADDR_B       0x0140U
 #define EXP_REC_SIZE     60U
@@ -69,7 +69,7 @@ static const Exp_Params defaults =
 {
   .p1_hold_min = 60, .p1_repeat = 2,
   .p2_settle_min = 30, .p2_step_min = 60, .p2_repeat = 3,
-  .p3_days = 10, .p3_hold_min = 3, .p3_hold_max = 40, .p3_amp_pct = 100,
+  .p3_days = 10, .p3_hold_min = 3, .p3_hold_max = 40, .p3_heat_pct = 60,
   .p4_days = 7, .p4_ctrl = EXP_CTRL_MIXED,
   .p5_days = 5, .p5_sp_c = 25,
   .p6_aprbs_h = 36, .p6_closed_h = 36,
@@ -144,7 +144,7 @@ static void Pack(uint8_t *b0)
   b = P32(b, R.paused_at); b = P32(b, R.paused_total); b = P16(b, R.seq);
   b = P16(b, R.pr.p1_hold_min); b = P8(b, R.pr.p1_repeat);
   b = P16(b, R.pr.p2_settle_min); b = P16(b, R.pr.p2_step_min); b = P8(b, R.pr.p2_repeat);
-  b = P8(b, R.pr.p3_days); b = P16(b, R.pr.p3_hold_min); b = P16(b, R.pr.p3_hold_max); b = P8(b, R.pr.p3_amp_pct);
+  b = P8(b, R.pr.p3_days); b = P16(b, R.pr.p3_hold_min); b = P16(b, R.pr.p3_hold_max); b = P8(b, R.pr.p3_heat_pct);
   b = P8(b, R.pr.p4_days); b = P8(b, R.pr.p4_ctrl);
   b = P8(b, R.pr.p5_days); b = P8(b, R.pr.p5_sp_c);
   b = P8(b, R.pr.p6_aprbs_h); b = P8(b, R.pr.p6_closed_h);
@@ -163,18 +163,19 @@ static uint8_t Unpack(const uint8_t *b0, uint16_t *seq_out)
   uint16_t c = (uint16_t)(b0[EXP_REC_SIZE - 2U] | (b0[EXP_REC_SIZE - 1U] << 8));
   if (Crc16(b0, EXP_REC_SIZE - 2U) != c) return 0U;
   b = G32(b, &magic); b = G8(b, &ver);
-  if (magic != EXP_MAGIC || (ver != 1U && ver != EXP_VERSION)) return 0U;
+  if (magic != EXP_MAGIC || ver < 1U || ver > EXP_VERSION) return 0U;
   b = G8(b, &R.state); b = G8(b, &R.full); b = G8(b, &R.stage); b = G8(b, &R.proc);
   b = G32(b, &R.seed); b = G32(b, &R.proc_start); b = G16(b, &R.step_idx);
   b = G32(b, &R.paused_at); b = G32(b, &R.paused_total); b = G16(b, &R.seq);
   b = G16(b, &R.pr.p1_hold_min); b = G8(b, &R.pr.p1_repeat);
   b = G16(b, &R.pr.p2_settle_min); b = G16(b, &R.pr.p2_step_min); b = G8(b, &R.pr.p2_repeat);
-  b = G8(b, &R.pr.p3_days); b = G16(b, &R.pr.p3_hold_min); b = G16(b, &R.pr.p3_hold_max); b = G8(b, &R.pr.p3_amp_pct);
+  b = G8(b, &R.pr.p3_days); b = G16(b, &R.pr.p3_hold_min); b = G16(b, &R.pr.p3_hold_max); b = G8(b, &R.pr.p3_heat_pct);
   b = G8(b, &R.pr.p4_days); b = G8(b, &R.pr.p4_ctrl);
   b = G8(b, &R.pr.p5_days); b = G8(b, &R.pr.p5_sp_c);
   b = G8(b, &R.pr.p6_aprbs_h); b = G8(b, &R.pr.p6_closed_h);
   b = G16(b, &R.pr.kp); b = G16(b, &R.pr.ti_s);
   if (ver >= 2U) b = G32(b, &R.file_t0);
+  if (ver < 3U)  R.pr.p3_heat_pct = defaults.p3_heat_pct;   /* eski simetrik genlik gecersiz */
   else           R.file_t0 = R.proc_start;     /* eski kayit */
   (void)b;
   *seq_out = R.seq;
@@ -248,8 +249,8 @@ static void ParamText(char *s, uint32_t n, Exp_Proc p)
   switch (p)
   {
     case EXP_P1_STATIC: snprintf(s, n, "basamak=%u dk tekrar=%u", q->p1_hold_min, q->p1_repeat); break;
-    case EXP_P2_STEP:   snprintf(s, n, "denge=%u dk basamak=%u dk tekrar=%u", q->p2_settle_min, q->p2_step_min, q->p2_repeat); break;
-    case EXP_P3_APRBS:  snprintf(s, n, "gun=%u tutma=%u-%u dk genlik=%u%% seed=%08lX", q->p3_days, q->p3_hold_min, q->p3_hold_max, q->p3_amp_pct, (unsigned long)R.seed); break;
+    case EXP_P2_STEP:   snprintf(s, n, "denge=%u dk basamak=%u dk tekrar=%u (+15/-50 +30/-75 +50/-100 %%)", q->p2_settle_min, q->p2_step_min, q->p2_repeat); break;
+    case EXP_P3_APRBS:  snprintf(s, n, "gun=%u tutma=%u-%u dk aralik=-%u..+%u%% seed=%08lX", q->p3_days, q->p3_hold_min, q->p3_hold_max, EXP_APRBS_COOL_PCT, q->p3_heat_pct, (unsigned long)R.seed); break;
     case EXP_P4_CLOSED: snprintf(s, n, "gun=%u kontrol=%u Kp=%u Ti=%u s", q->p4_days, q->p4_ctrl, q->kp, q->ti_s); break;
     case EXP_P5_DIST:   snprintf(s, n, "gun=%u SP=%u C Kp=%u Ti=%u s", q->p5_days, q->p5_sp_c, q->kp, q->ti_s); break;
     case EXP_P6_VALID:  snprintf(s, n, "aprbs=%u sa kapali=%u sa Kp=%u Ti=%u s", q->p6_aprbs_h, q->p6_closed_h, q->kp, q->ti_s); break;

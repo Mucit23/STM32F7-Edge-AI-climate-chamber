@@ -130,7 +130,7 @@ static const ParDef par_tab[8][4] =
   [3] = { { "Sure (gun)",         PO(p3_days),        1,   30,  1, NULL },
           { "En kisa tutma (dk)", PO(p3_hold_min),    1,   60,  1, NULL },
           { "En uzun tutma (dk)", PO(p3_hold_max),    5,  240,  5, NULL },
-          { "Genlik (%)",         PO(p3_amp_pct),    10,  100, 10, NULL } },
+          { "Isitma ust (%)",     PO(p3_heat_pct),    10,  100, 10, NULL } },
   [4] = { { "Sure (gun)",         PO(p4_days),        1,   30,  1, NULL },
           { "Kontrol",            PO(p4_ctrl),        0,    2,  1, ctrl_names },
           { "PID Kp",             PO(kp),            10, 2000, 10, NULL },
