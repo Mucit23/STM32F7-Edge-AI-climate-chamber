@@ -55,13 +55,54 @@ function TABLE(header, rows, widths) {
 }
 const GAP = () => new Paragraph({ children: [], spacing: { after: 120 } });
 
+
+// ---------------- P2 bolumu (defterde 7.4, ara raporda tek basina) ----------------
+function p2Bolum(H, fig0, n0) {
+  const A = [];
+  A.push(H("P2 – asimetrik basamak testi (24–25.11.2026)"));
+  A.push(P("Dosyalar `P2_20261124_0938.txt` + `P2_20261124_0938_2.txt` (86 400 satır sınırında bölündü). 30 sa, 107 999 satır, atlanan saniye 0, güvenlik kesmesi 0, sınırlayıcı devreye girmedi, kapak hiç açılmadı. Parametreler: denge 60 dk, basamak 90 dk, 2 tekrar; sıra [0][+15][0][−50][0][+30][0][−75][0][+50][0][−100] %. Ortam 17.6–24.2 °C arasında değişti. 25.11 01:32'de Ethernet 1 s koptu, 6 s'de Adafruit IO'ya yeniden bağlandı; SD kaydı etkilenmedi."));
+  A.push(TABLE(["Komut", "ΔT hava, 1./2. tekrar (K)", "Kazanç (K/%)", "τ, 1./2. (dk)", "Gecikme (s)", "Yüzey − hava (K)", "En yüksek nem (%)"], [
+    ["+15 %", "+10.1 / +9.8", "0.66", "21 / 22", "82 / 126", "+2.0 / +2.2", "34"],
+    ["+30 %", "+20.9 / +17.9", "0.65", "27 / 17", "64 / 75", "+3.8", "43"],
+    ["+50 %", "+29.0 / +29.4", "0.58", "18 / 19", "54 / 53", "+6.0 / +5.8", "35"],
+    ["−50 %", "−6.9 / −6.3", "0.13", "20 / 17", "94 / 91", "−0.3", "58"],
+    ["−75 %", "−11.4 / −13.6", "0.17", "20 / 25", "70 / 60", "−0.9 / −1.0", "63"],
+    ["−100 %", "−15.7 / −13.4", "0.15", "17 / 13", "44 / 48", "−1.7", "77"],
+  ], [1, 2.1, 1.2, 1.2, 1.2, 1.5, 1.3]));
+  A.push(GAP());
+  A.push(P("ΔT: basamağın son 5 dk ortalaması − basamak öncesi son 2 dk ortalaması. τ: 1. derece + ölü zaman modeli uydurması. Gecikme: komuttan sonra havanın 0.3 K değiştiği an (DHT22 0.1 K çözünürlüklü olduğu için üst sınır)."));
+  A.push(H3("Bulgular"));
+  A.push(B("**Kabin, 1. derece + ölü zaman modeliyle iyi tanımlanıyor:** 12 basamağın hepsinde RMSE 0.05–0.28 K. Baskın zaman sabiti τ ≈ 19 dk (13–27), ölü zaman ~1 dk. İki zaman sabitli model tutarlı bir iyileşme getirmedi; yavaş (duvar) bileşen 90 dk içinde küçük ve ortam değişimiyle karışıyor."));
+  A.push(B("**Isıtma neredeyse doğrusal, hafif doyuyor:** 0.66 → 0.58 K/% (+15 → +50 %). +50 %'de yüzey en çok 58.4 °C; P3'teki +60 % için yüzey ~65 °C beklenir, sınırlayıcı (70 °C) yedekte kalır."));
+  A.push(B("**Soğutma ısıtmanın ~1/4'ü ve doyuyor:** −50 % → −6.6 K, −75 % → −12.5 K, −100 % → −14.6 K (iki tekrar ortalaması). −75'ten −100 %'e geçiş yalnızca ~2 K kazandırıyor (Joule ısısı). Soğutma tarafı modelde ayrı bir kol olmalı."));
+  A.push(B("**\"−25 % ölü bölge\" yeniden yorumlandı:** u = 0'da kabin ortamın 1.3–3.0 K (ort. ~2 K) üstünde dengeleniyor (iç fanın ısısı). P1'deki −25 % ≈ ortam sonucu, dinlenme durumuna göre aslında ~−2 K soğutma demek. Yani −25 % etkisiz değil, iç fan ısısını karşılıyor."));
+  A.push(B("**Dinamik yön asimetrisi:** sürülen soğutma basamaklarında τ 13–25 dk, pasif dönüşte (u = 0) ısıtmadan sonra 21–25 dk, soğutmadan sonra 12–19 dk. Kabin soğuktan ortama ısıdan ortama döndüğünden daha hızlı dönüyor."));
+  A.push(B("**Tekrarlanabilirlik:** +15 ve +50 %'de fark < 0.4 K; +30, −75, −100 %'de 2–3 K. Farkın kaynağı başlangıç durumu ve ortam değişimi (ör. 1. tekrar +30 %'de ortam 2.9 K yükseldi). Ortam ve başlangıç durumu modelde girdi olmalı."));
+  A.push(B("**Ortam sensörü dış soğutucunun sıcak havasından etkileniyor:** −100 % basamaklarında T_ambient 2.5–4 K yükseliyor, basamak bitince 10 dk içinde ~1 K düşüyor; +50 %'de böyle bir etki yok. Ortam modelin bozucu girdisi olacağı için P3'ten önce sensör dış fanın emiş tarafına/uzağına taşınmalı."));
+  A.push(B("**Hava homojen:** karşı duvar − hava farkı ±0.4 K. Yüzey − hava farkı komutla orantılı (+50 %'de 6 K, −100 %'de −1.7 K)."));
+  A.push(B("**Nem ve yoğuşma:** −100 %'de nem %77'ye çıktı, iç yüzey (9.3 °C) çiğ noktasına ~2 K yaklaştı; soğutma bitince nem kısa süre %80'e sıçradı (yoğuşan suyun buharlaşması)."));
+  A.push(B("**PID ayarı:** ölçülen modelle (kazanç tablosu, τ = 19 dk, ölü zaman 60 s) P6 set profili benzetildi. Mevcut Kp = 150 komut/K, Ti = 600 s: ortalama hata 0.47 K, aşma 0.85 K, ±0.5 K'ye oturma 11–38 dk. SIMC/IMC ayarları (Kp 50–100, Ti 1140 s) daha yavaş; Kp 200/Ti 450 benzer. **Karar: mevcut ayar korunuyor.**"));
+  A.push(IMGP(fig0, 620, 399));
+  A.push(CAP(`Şekil ${n0}. P2 genel görünüm: sıcaklıklar, Peltier komutu, nem.`));
+  A.push(IMGP("P2_basamak_tepkileri.png", 620, 331));
+  A.push(CAP(`Şekil ${n0 + 1}. P2 basamak tepkileri, iki tekrar üst üste; kesikli çizgi 1. derece + ölü zaman modeli.`));
+  A.push(IMGP("P2_kazanc_egrisi.png", 620, 289));
+  A.push(CAP(`Şekil ${n0 + 2}. Kazanç eğrisi: P1 #2 (ortama göre, 60 dk) ve P2 (basamak öncesine göre, 90 dk). P2 soğutmada daha büyük çünkü dinlenme durumu ortamın ~2 K üstünde.`));
+  A.push(H3("P3 için öneriler"));
+  A.push(N("Ortam sensörünü dış fanın sıcak hava çıkışından uzaklaştır (girdi temizliği)."));
+  A.push(N("Aralık −100…+60 % uygun (yüzey ~65 °C, sınırlayıcı yedekte)."));
+  A.push(N("Tutma süresi 3–40 dk yerine 3–60 dk: en uzun segment ~3τ'ya ulaşır, kalıcı kazanç verisi de toplanır; en kısa 3 dk ölü zamanın 3 katı."));
+  A.push(N("Modelde girdi olarak u, T_ambient ve geçmiş T_air; giriş penceresi en az ~1 τ (≈ 20 dk), ısıtma ve soğutma için farklı kazanç."));
+  return A;
+}
+
 // ---------------- icerik ----------------
 const C = [];
 
 C.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun("Edge AI İklim Kabini – Proje Defteri")] }));
 C.push(P("Deney düzeneği, yazılım, veri formatı, test günlüğü ve kararlar", { spacing: { after: 60 } }));
 C.push(P("Tez: **Derin Öğrenme Tabanlı Gömülü Sistemler ile Akıllı Ortam Atmosferi Kontrolü için Gerçek Zamanlı Uç Birim (Edge AI) Sistem Tasarımı ve Gerçekleştirilmesi** (Yüksek Lisans) ve ilişkili TÜBİTAK 1002-A önerisi."));
-C.push(P("Son güncelleme: 24.11.2026. Kaynak kod: https://github.com/Mucit23/STM32F7-Edge-AI-climate-chamber"));
+C.push(P("Son güncelleme: 25.11.2026 (P2 sonuçları). Kaynak kod: https://github.com/Mucit23/STM32F7-Edge-AI-climate-chamber"));
 C.push(new TableOfContents("İçindekiler", { hyperlink: true, headingStyleRange: "1-2" }));
 C.push(new Paragraph({ children: [new PageBreak()] }));
 
@@ -161,7 +202,7 @@ C.push(P("Sütunlar sürüm içinde sona eklenerek genişledi; eski dosyalarda s
 C.push(H1("5. Deney protokolü"));
 C.push(TABLE(["Deney", "Tanım", "Varsayılan", "Süre"], [
   ["P1 Statik", "Seviyeler 0, +25, +50, +75, +100, 0, −25, −50, −75, −100, 0 %; her biri sabit tutulur", "60 dk × 2 tekrar", "22 sa"],
-  ["P2 Basamak", "Asimetrik genlik çiftleri: [0][+15] [0][−50] [0][+30] [0][−75] [0][+50] [0][−100] % (24.11'den itibaren; önceden ±25/50/100)", "oturma 30 dk, basamak 60 dk, × 3", "27 sa"],
+  ["P2 Basamak", "Asimetrik genlik çiftleri: [0][+15] [0][−50] [0][+30] [0][−75] [0][+50] [0][−100] % (24.11'den itibaren; önceden ±25/50/100)", "denge 60 dk, basamak 90 dk, × 2 (cihaz varsayılanı 30/60/3)", "30 sa"],
   ["P3 APRBS", "10'luk adımlarla rastgele seviye −100…+H %, rastgele tutma süresi (deterministik xorshift32, kesintide yeniden üretilir). H = ısıtma üst sınırı (24.11'den itibaren; önceden simetrik ±100)", "10 gün, tutma 3–40 dk, H = %60", "10 gün"],
   ["P4 Kapalı çevrim", "Günlere göre dönen profiller: basamak tablosu, rampa (0.05 °C/dk), gece/gündüz (18/28 °C). Kontrol PID/ON-OFF dönüşümlü (3 günde bir)", "7 gün, karışık", "7 gün"],
   ["P5 Sabit set", "PID ile sabit set değeri", "25 °C, 5 gün", "5 gün"],
@@ -233,16 +274,20 @@ C.push(IMGP("P1_20261123_0958.png", 620, 399));
 C.push(CAP("Şekil 3. P1 #2 (fanlı, tam): iki tekrar, ısıtma ve soğutma."));
 C.push(IMGP("P1_kazanc_egrisi.png", 620, 238));
 C.push(CAP("Şekil 4. Basamak sonu kazanç eğrisi: eski (fansız) ve yeni (iç soğutucu + fan) yapı."));
+C.push(...p2Bolum((t) => H2("7.4 " + t), "P2_20261124_0938.png", 5));
 
 // 8
 C.push(H1("8. Ölçülmüş model parametreleri"));
 C.push(TABLE(["Parametre", "Değer", "Kaynak"], [
-  ["Isıtma kalıcı kazancı (hava − ortam)", "~0.6 K/% (0…+75 %)", "P1 #2"],
-  ["Soğutma kazancı", "−25 %: ~0; −50 %: −0.07…−0.09 K/%; −100 %: −0.126 K/%", "P1 #2"],
-  ["Kabin havası zaman sabiti (t63)", "17–19 dk (fanlı); 22–25 dk (fansız) + yavaş duvar kuyruğu", "P1 #1, #2"],
+  ["Isıtma kazancı", "0.66 K/% (+15 %) → 0.58 K/% (+50 %); ~0.6 K/% (0…+75 %)", "P2, P1 #2"],
+  ["Soğutma kazancı (dinlenme durumuna göre)", "−50 %: 0.13; −75 %: 0.17; −100 %: 0.15 K/% (−75 → −100 % doyum)", "P2"],
+  ["Dinlenme ofseti (u = 0)", "Hava ortamın +1.3…+3.0 K üstünde (iç fan ısısı)", "P2"],
+  ["Ölü zaman", "~1 dk (DHT22 0.1 K adımıyla 44–126 s)", "P2"],
+  ["Kabin havası zaman sabiti", "τ ≈ 19 dk (13–27), 1. derece + ölü zaman RMSE ≤ 0.28 K; pasif dönüş: ısıdan 21–25, soğuktan 12–19 dk; fansız yapıda 22–25 dk", "P2, P1"],
   ["İç yüzey zaman sabiti", "4–5 dk (fansız); fanlı yapıda havayla birlikte (~13–16 dk)", "P1 #1, #2"],
   ["Yüzey − hava farkı", "+50 %'de 6 K, −100 %'de −1.7 K (fanlı)", "P1 #2"],
   ["Ulaşılabilir aralık (ortam ~20 °C)", "~7 °C … ~62 °C", "P1 #2"],
+  ["PID (kapalı çevrim, benzetim)", "Kp = 150 komut/K, Ti = 600 s korunuyor: P6 profilinde ort. hata 0.47 K, aşma 0.85 K", "P2 modeli"],
   ["Kapak açılması", "Hava −3…−5 K, ~10 dk toparlanma", "P1 kısmi"],
   ["Sınırlayıcı ayarı (fansız modelden, IMC)", "Kc = τ/(K·λ) = 300/(0.9·120) ≈ 2.8 %/K → 4 %/K seçildi; Ti = 300 s", "P1 #1"],
 ], [3.2, 4.2, 1.5]));
@@ -264,6 +309,10 @@ C.push(TABLE(["Tarih", "Karar", "Gerekçe"], [
   ["24.11", "P3 ve P6 APRBS aralığı −100…+60 %", "P1 #2: ısıtma/soğutma oranı 7–9; simetrik aralıkta zamanın %27'si 40 °C üstü (benzetim)"],
   ["24.11", "P2 asimetrik: +15/+30/+50 %, −50/−75/−100 %", "−25 % ölü bölge; benzer büyüklükte sıcaklık değişimi"],
   ["24.11", "Deney kaydı EEPROM sürümü 3", "Eski kayıtta P3 genliği simetrikti; yüklemede %60'a çevrilir"],
+  ["24.11", "P2 parametreleri denge 60 / basamak 90 dk / 2 tekrar (30 sa)", "P1: τ ≈ 18 dk; 30/60 dk dengeye ve dönüşe yetmiyordu"],
+  ["25.11", "PID Kp 150 / Ti 600 s değişmiyor", "P2 modeliyle benzetimde alternatiflerden iyi veya eşit"],
+  ["25.11", "\"−25 % ölü bölge\" yorumu geri alındı", "u = 0'da kabin ortamın ~2 K üstünde; −25 % bu ofseti karşılıyor"],
+  ["25.11", "Önerilen: ortam sensörü taşınacak, P3 tutma 3–60 dk", "−100 %'de T_ambient 2.5–4 K yükseliyor; en uzun segment ~3τ olmalı"],
 ], [0.9, 4.3, 4]));
 C.push(GAP());
 
@@ -277,11 +326,10 @@ C.push(TABLE(["APRBS aralığı", "Ort. kabin", "Ortam altında", "10–40 °C",
   ["−100…+50 %", "22 °C", "%48", "%94", "%4"],
 ], [2, 1.5, 1.6, 1.4, 1.4]));
 C.push(GAP());
-C.push(B("**P2 genlikleri (24.11'de uygulandı):** ısıtma +15/+30/+50 %, soğutma −50/−75/−100 % (−25 % ölü bölgede). Sıradaki test: P2 (27 sa), ardından PID ayarı."));
-C.push(B("**Basamak süresi:** 60 dk kalıcı duruma yetmiyor; kalıcı kazanç gerekiyorsa 90–120 dk."));
+C.push(B("**P2 tamamlandı (25.11):** sonuçlar 7.4'te. Sıradaki test P3 APRBS (10 gün). Öncesinde ortam sensörünün yeri ve tutma süresi (3–60 dk) kararı."));
 C.push(B("**Kabin hava sınırlayıcısı:** ısıtmada kabin havasını ≤ 50 °C tutan ikinci sınırlayıcı önerildi; şimdilik eklenmedi (60 °C donanım için sorun değil)."));
-C.push(B("**Nem/yoğuşma:** −100 %'de iç soğutucuda yoğuşma; nem modelde girdi olmalı."));
-C.push(B("**PID ayarı:** P2 verisinden yapılacak."));
+C.push(B("**Nem/yoğuşma:** −100 %'de iç soğutucuda yoğuşma (P2'de yüzey çiğ noktasına ~2 K); nem modelde girdi olmalı."));
+C.push(B("**PID ayarı:** P2 modeliyle kontrol edildi, mevcut ayar korunuyor; P4/P5 gerçek verisiyle doğrulanacak."));
 C.push(B("Adafruit IO anahtarı sohbet geçmişinde açık yazıldı; tez bitiminde veya kod paylaşımından önce yenilenmeli."));
 
 // 11
@@ -298,10 +346,20 @@ C.push(GAP());
 C.push(P("CubeMX ile yeniden üretmede dikkat: \"Delete previously generated files\" kapalı olmalı (Utilities/Fonts silinir); FATFS USE_LFN açık; `Core/Inc/sys/time.h` (LwIP cc.h uyumu) ve `main.c` içindeki `sio_*` boş fonksiyonları silinmemeli; yeni .c dosyaları Keil'e elle eklenir."));
 
 // ---------------- belge ----------------
+const RAPOR = process.argv[3];   // "--p2" -> yalnizca P2 ara raporu
+let BODY = C, BASLIK = "Edge AI İklim Kabini – Proje Defteri";
+if (RAPOR === "--p2") {
+  BASLIK = "Edge AI İklim Kabini – P2 Ara Raporu";
+  BODY = [
+    new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(BASLIK)] }),
+    P("Tarih: 25.11.2026. Bu rapor proje defterinin 7.4 bölümüyle aynı içeriktedir; deney düzeneği, veri formatı ve önceki testler için proje defterine bakınız."),
+    ...p2Bolum(H1, "P2_20261124_0938.png", 1),
+  ];
+}
 const doc = new Document({
   features: { updateFields: true },   // Word acilista icindekiler tablosunu gunceller
   creator: "Edge AI İklim Kabini",
-  title: "Edge AI İklim Kabini – Proje Defteri",
+  title: BASLIK,
   styles: {
     default: { document: { run: { font: FONT, size: 22 } } },
     paragraphStyles: [
@@ -324,8 +382,8 @@ const doc = new Document({
   },
   sections: [{
     properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
-    footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Edge AI İklim Kabini – Proje Defteri   |   ", size: 18, color: "777777" }), new TextRun({ children: [PageNumber.CURRENT], size: 18, color: "777777" })] })] }) },
-    children: C,
+    footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: BASLIK + "   |   ", size: 18, color: "777777" }), new TextRun({ children: [PageNumber.CURRENT], size: 18, color: "777777" })] })] }) },
+    children: BODY,
   }],
 });
 Packer.toBuffer(doc).then((b) => { fs.writeFileSync(OUT, b); console.log("yazildi", OUT); });
