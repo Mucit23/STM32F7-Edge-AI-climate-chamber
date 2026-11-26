@@ -436,7 +436,15 @@ function render() {
 function renderSd() {
   const f = last["sd"];
   const b = $("sdState");
-  if (!f || !f.value) return;
+  if (!f || !f.value) {
+    /* Anahtarsiz okumada yalnizca public feed'ler gelir: "sd" feed'i public degilse burada kalir */
+    if (lastUpdate && !getKey() && !f) {
+      b.textContent = "Görünmüyor"; b.className = "badge warn";
+      $("sdNote").textContent = "“" + CFG.group + ".sd” feed'i herkese açık (public) değil. Adafruit IO'da Feeds → " +
+        CFG.group + " → sd feed'inin gizlilik ayarını Public yapın.";
+    }
+    return;
+  }
   const [state, file, rec, err, freeMb, sizeKb] = String(f.value).split("|");
   const n = (x) => { const v = parseInt(x, 10); return Number.isFinite(v) ? v : null; };
   const recN = n(rec), errN = n(err), freeN = n(freeMb), sizeN = n(sizeKb);
